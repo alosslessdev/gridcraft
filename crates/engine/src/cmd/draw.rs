@@ -9,12 +9,22 @@ use super::*;
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "draw.pen", "Pen", ["Draw", "Tools"], None, "{on?: bool, color?: hex, width?: 2}", has_doc, pen),
+        cmd!(noundo "draw.actionPen", "Action Pen", ["Draw", "Tools"], None, "{on?: bool}", has_doc, action_pen),
         cmd!(noundo "draw.eraser", "Eraser", ["Draw", "Tools"], None, "{on?: bool}", has_doc, eraser),
         cmd!(noundo "draw.lasso", "Lasso Select", ["Draw", "Tools"], None, "{} (selects ink by dragging; same as Select Objects)", has_doc, |s, _| {
             s.draw_tool = String::new();
             ok()
         }),
         cmd!("draw.stroke", "Ink Stroke", [], None, "{points: [[x,y],…] in sheet points, color?: hex, width?: 2}", has_doc, stroke),
+        cmd!(
+            "draw.inkToText",
+            "Ink to Text",
+            [],
+            None,
+            "{points: [[x,y],…] in sheet points, cell?: \"B2\", language?: \"en-US\"}",
+            has_doc,
+            ink_to_text
+        ),
         cmd!(
             "draw.inkToShape",
             "Ink to Shape",
@@ -37,6 +47,12 @@ fn pen(s: &mut Session, p: &Json) -> Result<Json> {
         s.draw_width = w.clamp(0.5, 40.0) as f32;
     }
     Ok(json!({"tool": s.draw_tool, "color": s.draw_color, "width": s.draw_width}))
+}
+
+fn action_pen(s: &mut Session, p: &Json) -> Result<Json> {
+    let on = bool_param(p, "on").unwrap_or(s.draw_tool != "actionPen");
+    s.draw_tool = if on { "actionPen".into() } else { String::new() };
+    Ok(json!({"tool": s.draw_tool}))
 }
 
 fn eraser(s: &mut Session, p: &Json) -> Result<Json> {
@@ -155,4 +171,39 @@ fn ink_to_shape(s: &mut Session, p: &Json) -> Result<Json> {
         }
         Ok(json!({"kind": format!("{kind:?}")}))
     })
+}
+
+/// Recognize the handwriting in a stroke and enter it in a cell, as Excel's Action Pen does.
+fn ink_to_text(s: &mut Session, p: &Json) -> Result<Json> {
+    let points: Vec<[f32; 2]> = p
+        .get("points")
+        .and_then(Json::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|q| Some([q.get(0)?.as_f64()? as f32, q.get(1)?.as_f64()? as f32]))
+                .filter(|q| q[0].is_finite() && q[1].is_finite())
+                .take(20_000)
+                .collect()
+        })
+        .unwrap_or_default();
+    if points.len() < 2 {
+        return Err(bad("draw.inkToText", "a stroke needs at least two points"));
+    }
+    let language = str_param(p, "language").unwrap_or("").to_string();
+    let Some(recognizer) = s.handwriting.clone() else {
+        return Err(bad("draw.inkToText", "handwriting recognition is not available on this platform"));
+    };
+    let text = recognizer.recognize(std::slice::from_ref(&points), &language).map_err(|e| bad("draw.inkToText", &e))?;
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err(bad("draw.inkToText", "nothing was recognized"));
+    }
+    let cell = match str_param(p, "cell") {
+        Some(a) => CellRef::parse(a).ok_or_else(|| bad("draw.inkToText", "invalid cell reference"))?.to_string(),
+        None => s.doc()?.selection.active.to_string(),
+    };
+    // The recognized text enters through the normal cell-input path, so numbers and dates become
+    // typed values exactly as if they had been keyed.
+    super::edit::cell_set(s, &json!({"cell": cell, "input": text}))?;
+    Ok(json!({"text": text, "cell": cell}))
 }

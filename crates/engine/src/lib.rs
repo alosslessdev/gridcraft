@@ -12,6 +12,7 @@ mod clip_html;
 pub mod cmd;
 pub mod display;
 pub mod fill;
+pub mod handwriting;
 pub mod io;
 pub mod links;
 pub mod outline;
@@ -251,6 +252,8 @@ pub struct Session {
     pub draw_tool: String,
     pub draw_color: String,
     pub draw_width: f32,
+    /// Platform handwriting recognizer (registered by the app; `None` where there is none).
+    pub handwriting: Option<std::sync::Arc<dyn handwriting::HandwritingRecognizer>>,
     /// Review › Show Comments: the Comments pane is open.
     pub comments_pane: bool,
     /// Review › Notes › Show All Notes: every note is displayed. An application display setting

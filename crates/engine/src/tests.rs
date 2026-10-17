@@ -2388,6 +2388,27 @@ fn ink_strokes_and_ink_to_shape() {
 }
 
 #[test]
+fn action_pen_enters_recognized_text_through_cell_input() {
+    let mut s = s();
+    s.handwriting = Some(std::sync::Arc::new(FixedRecognizer));
+    let r = s.execute("draw.inkToText", json!({"points": [[10.0, 10.0], [30.0, 10.0]], "cell": "B2"})).unwrap();
+    assert_eq!(r["text"], "42");
+    let b2 = s.doc().unwrap().wb.active().unwrap().cells.get(CellRef::new(1, 1)).map(|c| c.value.clone());
+    assert_eq!(b2, Some(Value::Number(42.0)));
+    // Without a recognizer the command reports unavailability instead of crashing.
+    s.handwriting = None;
+    assert!(s.execute("draw.inkToText", json!({"points": [[10.0, 10.0], [30.0, 10.0]]})).is_err());
+}
+
+struct FixedRecognizer;
+
+impl crate::handwriting::HandwritingRecognizer for FixedRecognizer {
+    fn recognize(&self, _strokes: &[Vec<[f32; 2]>], _language: &str) -> Result<String, String> {
+        Ok("42".into())
+    }
+}
+
+#[test]
 fn xlsb_import_keeps_cached_values_and_reports_limits() {
     let bytes = xlsb_fixture();
     assert_eq!(gridcraft_xlsx::sniff(&bytes), gridcraft_xlsx::Format::Xlsb);

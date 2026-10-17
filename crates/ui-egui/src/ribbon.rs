@@ -1598,6 +1598,14 @@ fn draw(app: &mut SheetApp, ui: &mut Ui) {
             act(app, "draw.pen", json!({"on": !on, "color": color, "width": width}));
         }
     }
+    let ap_on = tool == "actionPen";
+    let ap = big_button(ui, Icon::Pen, "Action\nPen", "Use the Action Pen to enter data by handwriting", false);
+    if ap_on {
+        ui.painter().rect_stroke(ap.rect, 5.0, Stroke::new(2.0, Tokens::get(ui.ctx()).accent), StrokeKind::Inside);
+    }
+    if ap.clicked() {
+        act(app, "draw.actionPen", json!({"on": !ap_on}));
+    }
     let er = big_button(ui, Icon::Eraser, "Eraser", "Erase ink strokes", false);
     if tool == "eraser" {
         ui.painter().rect_stroke(er.rect, 5.0, Stroke::new(2.0, Tokens::get(ui.ctx()).accent), StrokeKind::Inside);

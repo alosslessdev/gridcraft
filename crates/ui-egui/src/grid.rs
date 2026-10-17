@@ -1849,7 +1849,7 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
     // Draw tab tools: the pen records a stroke, the eraser deletes ink under the pointer.
     if !app.session.draw_tool.is_empty() && in_cells {
         ctx.set_cursor_icon(CursorIcon::Crosshair);
-        if app.session.draw_tool == "pen" {
+        if app.session.draw_tool == "pen" || app.session.draw_tool == "actionPen" {
             if let Some(p) = pos
                 && resp.dragged()
             {
@@ -1877,7 +1877,14 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
             }
             if resp.drag_stopped() && app.grid.ink.len() >= 2 {
                 let pts: Vec<[f32; 2]> = std::mem::take(&mut app.grid.ink);
-                let _ = app.run("draw.stroke", json!({"points": pts}));
+                if app.session.draw_tool == "actionPen" {
+                    // Excel writes where the stroke starts: recognize and enter the text there.
+                    let first = pts.first().copied().unwrap_or([0.0, 0.0]);
+                    let cell = CellRef::new(sh.row_at(first[1].max(0.0) as f64), sh.col_at(first[0].max(0.0) as f64));
+                    let _ = app.run("draw.inkToText", json!({"points": pts, "cell": cell.to_string(), "language": app.ui.language.code()}));
+                } else {
+                    let _ = app.run("draw.stroke", json!({"points": pts}));
+                }
             }
             return;
         }

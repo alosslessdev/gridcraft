@@ -13,6 +13,8 @@ mod apple_events;
 mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
+#[cfg(target_os = "windows")]
+mod handwriting;
 mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
@@ -289,6 +291,10 @@ fn main() -> eframe::Result<()> {
         }
     }
     let mut session = Session::new();
+    #[cfg(target_os = "windows")]
+    {
+        session.handwriting = Some(std::sync::Arc::new(handwriting::WindowsHandwriting));
+    }
     if let Some(s) = &sample
         && let Err(e) = session.execute("file.new", json!({"sample": s}))
     {
