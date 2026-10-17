@@ -74,6 +74,7 @@ pub enum Icon {
     ChartScatter,
     Picture,
     Shapes,
+    Select,
     Link,
     Comment,
     Note,
@@ -505,6 +506,11 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, c: Color32) {
         Icon::Shapes => {
             g.circle(5.5, 5.5, 3.5, Some(BLUE), None);
             g.rect(7.0, 7.0, 7.0, 7.0, Some(ORANGE), None);
+        }
+        Icon::Select => {
+            const OUTLINE: [(f32, f32); 8] = [(3.0, 1.5), (3.0, 13.5), (6.3, 10.2), (8.8, 15.0), (11.0, 14.0), (8.5, 9.3), (13.2, 8.8), (3.0, 1.5)];
+            g.poly(&OUTLINE, Color32::WHITE);
+            g.stroke(&OUTLINE, c);
         }
         Icon::Link => {
             g.line(&[(6.0, 10.0), (10.0, 6.0)], c, 1.2);

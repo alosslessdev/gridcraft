@@ -1579,31 +1579,115 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     });
 }
 
+/// A pen's width with Excel's label spelling: whole values without a decimal, halves with one.
+fn pt_label(width: f32) -> String {
+    if (width - width.round()).abs() < 0.05 { format!("{}", width.round() as i32) } else { format!("{width:.1}") }
+}
+
+/// Large split button for the Draw tab's pen set: the body selects the pen, the arrow opens its
+/// thickness and colour menu. Laid out like [`big_button`], with the chevron in its own strip.
+fn pen_button(ui: &mut Ui, icon: Icon, key: &str, label: &str) -> (egui::Response, egui::Response) {
+    let t = Tokens::get(ui.ctx());
+    let font = theme::ui_font(11.5);
+    let lines: Vec<_> = label.split('\n').map(|line| ui.painter().layout_no_wrap(line.to_string(), font.clone(), t.text)).collect();
+    let arrow_w = 14.0;
+    let text_w = lines.iter().map(|line| line.size().x).fold(0.0, f32::max);
+    let (rect, _) = ui.allocate_exact_size(vec2((text_w + arrow_w + 12.0).max(56.0), 72.0), Sense::hover());
+    let main = egui::Rect::from_min_max(rect.min, pos2(rect.right() - arrow_w, rect.bottom()));
+    let arrow = egui::Rect::from_min_max(pos2(main.right(), rect.top()), rect.max);
+    let body = ui.interact(main, ui.id().with((key, "body")), Sense::click());
+    let more = ui.interact(arrow, ui.id().with((key, "more")), Sense::click());
+    if body.is_pointer_button_down_on() || more.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, 5.0, t.pressed);
+    } else if body.hovered() || more.hovered() {
+        ui.painter().rect_filled(rect, 5.0, t.hover);
+    }
+    icons::paint(ui.painter(), egui::Rect::from_center_size(pos2(rect.center().x, rect.top() + 21.0), vec2(30.0, 30.0)), icon, t.text);
+    for (i, line) in lines.iter().enumerate() {
+        let y = rect.top() + 46.0 + i as f32 * 13.0;
+        ui.painter().galley(pos2(rect.center().x - line.size().x / 2.0, y - line.size().y / 2.0), line.clone(), t.text);
+    }
+    icons::paint(
+        ui.painter(),
+        egui::Rect::from_center_size(pos2(arrow.center().x, rect.bottom() - 13.0), vec2(10.0, 10.0)),
+        Icon::Chevron,
+        t.text_dim,
+    );
+    (body.on_hover_text(app_hint(ui, "Draw with ink")), more)
+}
+
+/// Tooltips for the custom widgets above, translated like the ribbon's own labels.
+fn app_hint<'a>(ui: &Ui, text: &'a str) -> &'a str {
+    crate::i18n::current(ui.ctx()).tr(text)
+}
+
 fn draw(app: &mut SheetApp, ui: &mut Ui) {
     let tool = app.session.draw_tool.clone();
-    let __k = big_button(ui, Icon::Shapes, "Select\nObjects", "Select and move ink and shapes", false);
-    control_keytip(app, ui, &__k, "draw.lasso");
-    if __k.clicked() {
+    let color = app.session.draw_color.to_ascii_lowercase();
+    // Excel's Draw tab: Select, Eraser, the pen set, then Ink to Shape under Convert. Group
+    // captions and the remaining Excel groups are the ribbon-layout work tracked in #1764/#1767;
+    // Lasso Select's ink loop and the editable pen gallery belong to the ink-model work in #1187.
+    let sel = big_button(ui, Icon::Select, "Select", "Select objects including ink, shapes and text areas", false);
+    control_keytip(app, ui, &sel, "draw.lasso");
+    if sel.clicked() {
         act(app, "draw.lasso", json!({}));
     }
     sep(ui);
-    for (label, color) in [("Pen\nBlue", "#1F5FC9"), ("Pen\nBlack", "#000000"), ("Pen\nRed", "#D13B2F"), ("Highlighter", "#F2E33A")] {
-        let on = tool == "pen" && app.session.draw_color.eq_ignore_ascii_case(color);
-        let r = big_button(ui, Icon::Pen, label, "Draw with ink", false);
-        if on {
-            ui.painter().rect_stroke(r.rect, 5.0, Stroke::new(2.0, Tokens::get(ui.ctx()).accent), StrokeKind::Inside);
-        }
-        if r.clicked() {
-            let width = if label == "Highlighter" { 12.0 } else { 2.0 };
-            act(app, "draw.pen", json!({"on": !on, "color": color, "width": width}));
-        }
-    }
     let er = big_button(ui, Icon::Eraser, "Eraser", "Erase ink strokes", false);
     if tool == "eraser" {
         ui.painter().rect_stroke(er.rect, 5.0, Stroke::new(2.0, Tokens::get(ui.ctx()).accent), StrokeKind::Inside);
     }
     if er.clicked() {
         act(app, "draw.eraser", json!({}));
+    }
+    sep(ui);
+    for (kind, name, hex, default_width) in [
+        ("Pen", "Blue", "#1F5FC9", 2.0_f32),
+        ("Pen", "Black", "#000000", 2.0),
+        ("Pen", "Red", "#D13B2F", 2.0),
+        ("Highlighter", "Yellow", "#F2E33A", 12.0),
+    ] {
+        let on = tool == "pen" && color.eq_ignore_ascii_case(hex);
+        let width = if on { app.session.draw_width } else { default_width };
+        let label = format!("{}: {name}, {} pt", app.ui.language.tr(kind), pt_label(width));
+        let (body, more) = pen_button(ui, Icon::Pen, hex, &label);
+        if on {
+            ui.painter().rect_stroke(body.rect, 5.0, Stroke::new(2.0, Tokens::get(ui.ctx()).accent), StrokeKind::Inside);
+        }
+        if body.clicked() {
+            act(app, "draw.pen", json!({"on": !on, "color": hex, "width": width}));
+        }
+        egui::Popup::menu(&more).show(|ui| {
+            ui.set_min_width(156.0);
+            ui.label(app.ui.language.tr("Thickness"));
+            for w in [0.5_f32, 1.0, 2.0, 3.0, 4.5, 6.0, 9.0, 12.0, 17.0] {
+                if ui.add(egui::Button::new(format!("{} pt", pt_label(w))).frame(false).min_size(vec2(146.0, 22.0))).clicked() {
+                    act(app, "draw.pen", json!({"on": true, "color": hex, "width": w}));
+                }
+            }
+            ui.separator();
+            ui.label(app.ui.language.tr("Colour"));
+            ui.horizontal(|ui| {
+                for (name, swatch, rgb) in [
+                    ("Black", "#000000", [0x00, 0x00, 0x00]),
+                    ("Blue", "#1F5FC9", [0x1F, 0x5F, 0xC9]),
+                    ("Red", "#D13B2F", [0xD1, 0x3B, 0x2F]),
+                    ("Green", "#217346", [0x21, 0x73, 0x46]),
+                    ("Orange", "#E97132", [0xE9, 0x71, 0x32]),
+                    ("Purple", "#7030A0", [0x70, 0x30, 0xA0]),
+                    ("Yellow", "#F2E33A", [0xF2, 0xE3, 0x3A]),
+                    ("Grey", "#7F7F7F", [0x7F, 0x7F, 0x7F]),
+                    ("White", "#FFFFFF", [0xFF, 0xFF, 0xFF]),
+                ] {
+                    let (rect, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+                    ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+                    ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, Tokens::get(ui.ctx()).separator), StrokeKind::Inside);
+                    if resp.on_hover_text(app_hint(ui, name)).clicked() {
+                        act(app, "draw.pen", json!({"on": true, "color": swatch, "width": width}));
+                    }
+                }
+            });
+        });
     }
     sep(ui);
     let __k = big_button(ui, Icon::Shapes, "Ink to\nShape", "Convert the last ink stroke to a shape", false);
