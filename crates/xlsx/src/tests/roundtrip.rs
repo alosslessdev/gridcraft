@@ -1365,6 +1365,22 @@ fn gradient_fill_roundtrips_type_stops_and_colors() {
     assert_eq!(back.styles.get(sh.style_id(at("A2"))), wb.styles.get(path));
 }
 
+/// Excel's own solid fill is `<patternFill patternType="solid"><fgColor .../><bgColor indexed="64"/></patternFill>`.
+/// A partial `home.formatCells` fill must produce the same bytes, not a missing/odd background.
+#[test]
+fn solid_fill_writes_excels_bgcolor_indexed_64() {
+    let mut wb = Workbook::new();
+    let id = wb.styles.derive(StyleId::DEFAULT, |s| s.fill = Fill::solid(Color::Rgb(0xFF0000)));
+    let sh = wb.sheet_mut(0).unwrap();
+    sh.set_value(at("A1"), Value::Number(1.0));
+    sh.set_style(at("A1"), id);
+
+    let bytes = write_xlsx(&wb).unwrap();
+    let mut pkg = Package::open(&bytes).unwrap();
+    let xml = String::from_utf8(pkg.read("xl/styles.xml").unwrap().unwrap()).unwrap();
+    assert!(xml.contains(r#"<patternFill patternType="solid"><fgColor rgb="FFFF0000"/><bgColor indexed="64"/></patternFill>"#), "{xml}");
+}
+
 #[test]
 fn doc_props_keep_boundary_whitespace() {
     let mut wb = Workbook::new();
