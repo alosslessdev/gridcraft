@@ -695,6 +695,44 @@ fn custom_widths_equal_to_the_default_round_trip() {
     let cols: Vec<_> =
         sheet.child("cols").unwrap().kids("col").map(|c| (c.attr_u32("min"), c.attr_u32("max"), c.flag("customWidth", false))).collect();
     assert_eq!(cols, [(Some(4), Some(7), true)]);
+/// The four `<gradientFill>` elements are copied verbatim from `xl/styles.xml` written by Excel
+/// 16.0 after setting `Interior.Gradient.Degree` to 0, 45, 90 and 135. Excel omits `degree` for 0.
+#[test]
+fn excel_written_gradient_degrees_are_screen_angles() {
+    let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+      <fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+        <fill><gradientFill><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+        <fill><gradientFill degree="45"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+        <fill><gradientFill degree="90"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+        <fill><gradientFill degree="135"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+      </fills>
+      <cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0"/></cellXfs>
+    </styleSheet>"#;
+    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
+    let body = r#"<sheetData><row r="1"><c r="A1" s="1"/><c r="B1" s="2"/><c r="C1" s="3"/><c r="D1" s="4"/></row></sheetData>"#;
+    let (wb, _) = read_xlsx(&minimal(body, &[("xl/styles.xml", styles)], rels, "")).unwrap();
+    let sh = wb.sheet(0).unwrap();
+    let gradient = |a: &str| {
+        let fill = wb.styles.get(sh.style_id(at(a))).fill.clone();
+        fill.gradient.clone().unwrap_or_else(|| panic!("{a}: {fill:?}"))
+    };
+    let (g0, g45, g90, g135) = (gradient("A1"), gradient("B1"), gradient("C1"), gradient("D1"));
+    assert_eq!(g0.kind, GradientKind::Linear { degree: 0.0 });
+    assert_eq!(g45.kind, GradientKind::Linear { degree: 45.0 });
+    assert_eq!(g90.kind, GradientKind::Linear { degree: 90.0 });
+    assert_eq!(g135.kind, GradientKind::Linear { degree: 135.0 });
+    assert_eq!(g0.stops.len(), 2);
+    assert_eq!(g0.stops[0].color, Color::Rgb(0xFF0000));
+    assert_eq!(g0.stops[1].color, Color::Rgb(0xFFFF00));
+    // Screen coordinates: u right, v down.
+    assert_eq!(g0.position(0.0, 0.5), 0.0);
+    assert_eq!(g0.position(1.0, 0.5), 1.0);
+    assert_eq!(g45.position(0.0, 0.0), 0.0);
+    assert_eq!(g45.position(1.0, 1.0), 1.0);
+    assert_eq!(g90.position(0.5, 0.0), 0.0);
+    assert_eq!(g90.position(0.5, 1.0), 1.0);
+    assert_eq!(g135.position(1.0, 0.0), 0.0);
+    assert_eq!(g135.position(0.0, 1.0), 1.0);
 }
 
 #[test]

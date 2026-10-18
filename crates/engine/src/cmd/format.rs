@@ -585,7 +585,15 @@ pub(crate) fn merge_style_json(mut base: Json, patch: &Json) -> Json {
     if let (Json::Object(b), Json::Object(p)) = (&mut base, patch)
         && let Some(fill) = p.get("fill")
     {
-        b.insert("fill".into(), fill.clone());
+        // The fill still replaces the old fill, but a partial fill patch starts from the default
+        // fill so the documented "all keys optional" contract holds. Excel itself writes a solid
+        // fill as patternType="solid" with fgColor and bgColor indexed="64" (automatic), so an
+        // omitted `bg` defaults to the same value as the Fill tab's output.
+        let fill = match fill {
+            Json::Object(_) => merge_json(serde_json::to_value(Fill::default()).unwrap_or(Json::Null), fill),
+            other => other.clone(),
+        };
+        b.insert("fill".into(), fill);
     }
     merge_json(base, patch)
 }
@@ -1325,6 +1333,39 @@ mod tests {
         s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": gradient}})).unwrap();
         s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": Fill::solid(Color::Rgb(0x00FF00))}})).unwrap();
         let got = s.execute("cell.get", json!({"cell": "A1"})).unwrap();
+        let fill: Fill = serde_json::from_value(got["style"]["fill"].clone()).unwrap();
+        assert_eq!(fill.pattern, PatternType::Solid);
+        assert!(fill.gradient.is_none());
+    }
+
+    #[test]
+    fn partial_fill_patches_default_omitted_fields() {
+        use gridcraft_model::{Color, Fill, PatternType};
+        let mut s = crate::Session::new();
+        s.new_workbook();
+
+        // Solid with pattern + fg, but no bg (the natural Format Cells payload).
+        s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": {"pattern": "Solid", "fg": {"Rgb": 16711680}}}})).unwrap();
+        let got = s.execute("cell.get", json!({"cell": "A1"})).unwrap();
+        let fill: Fill = serde_json::from_value(got["style"]["fill"].clone()).unwrap();
+        assert_eq!(fill.pattern, PatternType::Solid);
+        assert_eq!(fill.fg, Color::Rgb(0xFF0000));
+        assert_eq!(fill.bg, Color::Auto);
+
+        // Gradient with only `gradient`; pattern/fg/bg come from the default fill.
+        let gradient = json!({"fill": {"gradient": {
+            "kind": {"Linear": {"degree": 90.0}},
+            "stops": [{"position": 0.0, "color": {"Rgb": 16711680}}, {"position": 1.0, "color": {"Rgb": 255}}]
+        }}});
+        s.execute("home.formatCells", json!({"range": "A2", "style": gradient})).unwrap();
+        let got = s.execute("cell.get", json!({"cell": "A2"})).unwrap();
+        let fill: Fill = serde_json::from_value(got["style"]["fill"].clone()).unwrap();
+        assert!(fill.gradient.is_some());
+        assert_eq!(fill.pattern, PatternType::None);
+
+        // A partial solid still replaces (clears) an existing gradient.
+        s.execute("home.formatCells", json!({"range": "A2", "style": {"fill": {"pattern": "Solid", "fg": {"Rgb": 65280}}}})).unwrap();
+        let got = s.execute("cell.get", json!({"cell": "A2"})).unwrap();
         let fill: Fill = serde_json::from_value(got["style"]["fill"].clone()).unwrap();
         assert_eq!(fill.pattern, PatternType::Solid);
         assert!(fill.gradient.is_none());

@@ -990,6 +990,16 @@ pub(super) const DIALOGS: &[(&str, &str)] = &[
     ("Tab Color", "シートの見出しの色"),
     ("Unhide…", "再表示…"),
     ("Unprotect Sheet…", "シート保護の解除…"),
+    ("No fill", "塗りつぶしなし"),
+    ("Solid", "塗りつぶし"),
+    ("Gradient", "グラデーション"),
+    ("Path", "パス"),
+    ("Angle", "角度"),
+    ("Diagonal up", "斜め上"),
+    ("Diagonal down", "斜め下"),
+    ("From center", "中心から"),
+    ("From corner", "隅から"),
+    ("Add Stop", "停止位置を追加"),
 ];
 
 /// Labels of the ribbon menus, pop-ups and palettes that the reference catalog does not cover (the

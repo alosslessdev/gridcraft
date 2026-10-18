@@ -336,6 +336,39 @@ mod tests {
     }
 
     #[test]
+    fn fill_tab_labels_are_in_every_catalog() {
+        // Source-driven: every literal label in `fill_tab` must exist in every non-English
+        // language, so a new control cannot ship as English-only.
+        let src = include_str!("dialogs.rs");
+        let start = src.find("fn fill_tab(").expect("fill_tab");
+        let body = &src[start..];
+        let end = body.find("\nfn ").unwrap_or(body.len());
+        let body = &body[..end];
+        let mut keys: Vec<&str> = body
+            .match_indices("lang.tr(\"")
+            .filter_map(|(i, _)| {
+                let rest = &body[i + "lang.tr(\"".len()..];
+                rest.find('"').map(|j| &rest[..j])
+            })
+            .collect();
+        // The four preset buttons pass their label through a variable.
+        keys.extend(["Vertical", "Diagonal up", "Horizontal", "Diagonal down"]);
+        keys.sort_unstable();
+        keys.dedup();
+        assert!(keys.contains(&"Gradient") && keys.contains(&"Add Stop"));
+        for language in Language::ALL {
+            if language == Language::En {
+                continue;
+            }
+            for key in &keys {
+                let english = key.rsplit_once('|').map_or(*key, |(_, label)| label);
+                let shown = language.tr(key);
+                assert!(shown != english, "missing {}: {key}", language.code());
+            }
+        }
+    }
+
+    #[test]
     fn untranslated_text_falls_back_to_english() {
         let label = |key: &'static str| key.rsplit_once('|').map_or(key, |(_, label)| label);
         for (english, _) in ja::CORE {

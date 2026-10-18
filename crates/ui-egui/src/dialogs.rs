@@ -2000,7 +2000,7 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
                 GradientKind::Linear { degree } => {
                     ui.add(egui::Slider::new(degree, 0.0..=360.0).text(lang.tr("Angle")));
                     ui.horizontal(|ui| {
-                        for (label, value) in [("Vertical", 0.0), ("Diagonal up", 45.0), ("Horizontal", 90.0), ("Diagonal down", 135.0)] {
+                        for (label, value) in [("Vertical", 90.0), ("Diagonal up", 315.0), ("Horizontal", 0.0), ("Diagonal down", 45.0)] {
                             if ui.small_button(lang.tr(label)).clicked() {
                                 *degree = value;
                             }

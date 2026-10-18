@@ -271,7 +271,8 @@ impl Hash for GradientStop {
 }
 
 /// A linear or path gradient. Positions and convergence values are clamped to 0..=1;
-/// linear degrees are normalised to 0..360.
+/// linear degrees are normalised to 0..360. Degrees follow SpreadsheetML: 0 = left-to-right,
+/// 90 = top-to-bottom, measured clockwise from the horizontal axis.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum GradientKind {
     Linear { degree: f64 },
@@ -386,6 +387,12 @@ impl GradientFill {
     /// Samples the gradient at normalised cell coordinates (`u` right, `v` down).
     pub fn sample(&self, u: f64, v: f64, theme: &Theme) -> Option<[u8; 3]> {
         let stops = self.resolved_stops(theme);
+        self.sample_resolved(&stops, u, v)
+    }
+
+    /// Samples against stops already resolved for the theme. Rendering paths call this with one
+    /// `resolved_stops` per cell instead of resolving (and allocating) for every vertex.
+    pub fn sample_resolved(&self, stops: &[(f64, [u8; 3])], u: f64, v: f64) -> Option<[u8; 3]> {
         let first = stops.first()?;
         let last = stops.last()?;
         let t = self.position(u, v);
@@ -416,7 +423,9 @@ impl GradientFill {
         match self.kind {
             GradientKind::Linear { degree } => {
                 let angle = degree.to_radians();
-                let (dx, dy) = (angle.sin(), angle.cos());
+                // SpreadsheetML measures `degree` clockwise from the horizontal axis, with v
+                // down: 0 = left-to-right, 90 = top-to-bottom.
+                let (dx, dy) = (angle.cos(), angle.sin());
                 let lo = dx.min(0.0) + dy.min(0.0);
                 let hi = dx.max(0.0) + dy.max(0.0);
                 if hi > lo {
@@ -475,6 +484,18 @@ impl Fill {
 
     pub fn is_gradient(&self) -> bool {
         self.gradient.is_some()
+    }
+
+    /// The colour a swatch or non-gradient fallback (HTML export) should show: the first stop for
+    /// a gradient, the foreground for a pattern/solid, and `None` for no fill.
+    pub fn preview_color(&self, theme: &Theme) -> Option<[u8; 3]> {
+        if let Some(g) = &self.gradient {
+            g.stops.first().and_then(|s| s.color.resolve(theme))
+        } else if self.pattern != PatternType::None {
+            self.fg.resolve(theme)
+        } else {
+            None
+        }
     }
 
     /// Repairs values that arrived through JSON: clamps and orders gradient stops and keeps a
@@ -765,19 +786,43 @@ mod tests {
     fn gradient_sampling_and_normalisation() {
         let th = Theme::default();
         let stops = vec![GradientStop { position: 0.0, color: Color::Rgb(0x000000) }, GradientStop { position: 1.0, color: Color::Rgb(0xFFFFFF) }];
-        let horizontal = GradientFill::linear(90.0, stops.clone());
+        let horizontal = GradientFill::linear(0.0, stops.clone());
         assert_eq!(horizontal.position(0.0, 0.5), 0.0);
         assert_eq!(horizontal.position(1.0, 0.5), 1.0);
         assert_eq!(horizontal.sample(0.5, 0.5, &th), Some([128, 128, 128]));
 
-        // 0 degrees is top-to-bottom; 180 and 270 reverse the two axes.
-        let vertical = GradientFill::linear(0.0, stops.clone());
+        // SpreadsheetML: 0 = left-to-right, 90 = top-to-bottom, 180 = right-to-left,
+        // 270 = bottom-to-top.
+        let vertical = GradientFill::linear(90.0, stops.clone());
         assert_eq!(vertical.position(0.5, 0.0), 0.0);
         assert_eq!(vertical.position(0.5, 1.0), 1.0);
-        let reversed = GradientFill::linear(180.0, stops.clone());
-        assert_eq!(reversed.position(0.5, 0.0), 1.0);
-        let right_to_left = GradientFill::linear(270.0, stops.clone());
+        let right_to_left = GradientFill::linear(180.0, stops.clone());
         assert_eq!(right_to_left.position(0.0, 0.5), 1.0);
+        assert_eq!(right_to_left.position(1.0, 0.5), 0.0);
+        let bottom_to_top = GradientFill::linear(270.0, stops.clone());
+        assert_eq!(bottom_to_top.position(0.5, 0.0), 1.0);
+        assert_eq!(bottom_to_top.position(0.5, 1.0), 0.0);
+        let down_right = GradientFill::linear(45.0, stops.clone());
+        assert_eq!(down_right.position(0.0, 0.0), 0.0);
+        assert_eq!(down_right.position(1.0, 1.0), 1.0);
+        let down_left = GradientFill::linear(135.0, stops.clone());
+        assert_eq!(down_left.position(1.0, 0.0), 0.0);
+        assert_eq!(down_left.position(0.0, 1.0), 1.0);
+
+        // Resolving once per cell must give the same samples as resolving per point.
+        let resolved = horizontal.resolved_stops(&th);
+        for (u, v) in [(0.0, 0.0), (0.25, 0.75), (0.5, 0.5), (1.0, 1.0)] {
+            assert_eq!(horizontal.sample_resolved(&resolved, u, v), horizontal.sample(u, v, &th));
+        }
+
+        // Swatches and HTML fall back to the first gradient stop, then the solid foreground.
+        let preview = Fill::gradient(
+            GradientKind::Linear { degree: 90.0 },
+            vec![GradientStop { position: 0.0, color: Color::Rgb(0xFF0000) }, GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) }],
+        );
+        assert_eq!(preview.preview_color(&th), Some([255, 0, 0]));
+        assert_eq!(Fill::solid(Color::Rgb(0x00FF00)).preview_color(&th), Some([0, 255, 0]));
+        assert_eq!(Fill::default().preview_color(&th), None);
 
         let center = GradientFill::path(0.5, 0.5, 0.5, 0.5, stops);
         assert_eq!(center.position(0.5, 0.5), 0.0);
