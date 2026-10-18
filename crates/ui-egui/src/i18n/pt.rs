@@ -980,6 +980,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "From center" => "Do centro",
         "From corner" => "Do canto",
         "Add Stop" => "Adicionar parada",
+        "Gradient|Stop" => "Parada",
         _ => return None,
     })
 }

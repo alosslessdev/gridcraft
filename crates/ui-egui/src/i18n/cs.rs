@@ -562,6 +562,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "Dole",
         "Stop" => "Zastávka",
         "Add Stop" => "Přidat zastávku",
+        "Gradient|Stop" => "Zastávka přechodu",
         _ => return None,
     })
 }

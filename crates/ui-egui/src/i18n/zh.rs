@@ -442,6 +442,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "下",
         "Stop" => "停止点",
         "Add Stop" => "添加停止点",
+        "Gradient|Stop" => "渐变停止点",
         _ => return None,
     })
 }

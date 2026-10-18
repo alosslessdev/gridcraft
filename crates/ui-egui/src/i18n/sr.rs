@@ -450,6 +450,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "Dole",
         "Stop" => "Zaustavljanje",
         "Add Stop" => "Dodaj zaustavljanje",
+        "Gradient|Stop" => "Zaustavljanje gradijenta",
         _ => return None,
     })
 }
