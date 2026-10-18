@@ -164,7 +164,7 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("NH1", Entry::Finish(Action::Dialog("headerFooter"))), // Excel: Header & Footer
     ("NHF", Entry::Finish(Action::Command("pageLayout.headerFooter"))), // Excel: Header & Footer
     ("NHI", Entry::Finish(Action::Control("insert.chart.hierarchy"))), // Excel: Hierarchy Chart; Hierarchy (kind TBD)
-    ("NI1", Entry::Finish(Action::Command("insert.chart"))), // Excel: Waterfall Chart; Waterfall (kind TBD)
+    ("NI1", Entry::Finish(Action::Control("insert.chart.waterfall"))), // Excel: Waterfall Chart; Waterfall, Funnel, Stock or Radar
     ("NI2", Entry::Finish(Action::Dialog("insertLink"))), // Excel: Link
     ("NJ", Entry::Finish(Action::Pending("insert.object"))), // pending; Excel: Object; insert.object missing; reserved until the command lands
     ("NM1T", Entry::Finish(Action::Command("insert.picture"))), // Excel: SmartArt Picture; containment(Picture)
@@ -180,7 +180,7 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("NR", Entry::Finish(Action::Command("insert.recommendedCharts"))), // Excel: Recommended Charts
     ("NSA", Entry::Finish(Action::Control("insert.chart.statistic"))), // Excel: Statistical Chart; Statistical chart (kind TBD)
     ("NSC", Entry::Finish(Action::Pending("insert.screenshot"))), // pending; Excel: Screenshot Menu; Screenshot; reserved until the command lands
-    ("NSD", Entry::Finish(Action::Command("insert.chart"))), // Excel: Combo Chart; Combo (kind TBD)
+    ("NSD", Entry::Finish(Action::Control("insert.chart.combo"))), // Excel: Combo Chart; Combo
     ("NSF", Entry::Finish(Action::Command("insert.slicer"))), // Excel: Slicer; insert.slicer missing (gap #8); reserved until the command lands
     ("NSH", Entry::Finish(Action::Command("insert.shape"))), // Excel: Shapes
     ("NSP", Entry::Finish(Action::Command("insert.recommendedPivotTables"))), // Excel: Recommended PivotTables

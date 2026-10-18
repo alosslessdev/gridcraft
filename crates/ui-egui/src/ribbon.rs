@@ -1762,6 +1762,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                     ],
                 ),
                 (Icon::ChartPie, "Pie or Doughnut", "insert.chart.pie", vec![("Pie", "pie", ""), ("Doughnut", "doughnut", "")]),
+                (Icon::Theme, "Hierarchy", "insert.chart.hierarchy", vec![("Treemap", "treemap", ""), ("Sunburst", "sunburst", "")]),
             ] {
                 let r = small_button(ui, icon, "", tip, true);
                 control_keytip(app, ui, &r, cid);
@@ -1785,19 +1786,12 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                 ),
                 (Icon::Chart, "Statistic", "insert.chart.statistic", vec![("Histogram", "histogram", ""), ("Box & Whisker", "boxWhisker", "")]),
                 (
-                    Icon::Theme,
-                    "Hierarchy & more",
-                    "insert.chart.hierarchy",
-                    vec![
-                        ("Treemap", "treemap", ""),
-                        ("Sunburst", "sunburst", ""),
-                        ("Waterfall", "waterfall", ""),
-                        ("Funnel", "funnel", ""),
-                        ("Radar", "radar", ""),
-                        ("Stock", "stock", ""),
-                        ("Combo", "combo", ""),
-                    ],
+                    Icon::ChartWaterfall,
+                    "Waterfall, Funnel, Stock or Radar",
+                    "insert.chart.waterfall",
+                    vec![("Waterfall", "waterfall", ""), ("Funnel", "funnel", ""), ("Stock", "stock", ""), ("Radar", "radar", "")],
                 ),
+                (Icon::ChartCombo, "Combo", "insert.chart.combo", vec![("Combo", "combo", "")]),
             ] {
                 let r = small_button(ui, icon, "", tip, true);
                 control_keytip(app, ui, &r, cid);
