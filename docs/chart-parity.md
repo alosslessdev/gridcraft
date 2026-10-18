@@ -1,13 +1,15 @@
 # Chart parity
 
-> **Last reviewed:** 2026-10-11 · **Last updated:** 2026-10-12 · **Change:** trivial (chart sheets are kept on save, still not editable (#727); previously minor: trendlines: model, XLSX round-trip, drawing, Add Chart Element) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (doughnut charts: every series is a concentric ring; hole size and first slice angle kept) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Excel's chart types and chart elements against GridCraft. Part of
 [target-app-parity.md](target-app-parity.md). **Breadth ~50%, ready ~30%, 40–60 h** (estimated).
 
 Sources: `crates/model/src/features.rs` (`ChartKind`, `Chart`, `Series`), `crates/chart/src`
 (layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62 and #116,
-open PRs #158, #161, and issue #190.
+open PRs #158, #161, and issue #190. Behaviour checked against Microsoft's
+[Pareto](https://support.microsoft.com/en-us/excel/create-a-pareto-chart) and
+[pie/doughnut](https://support.microsoft.com/en-us/excel/add-a-pie-chart) support pages.
 
 ## Chart types
 
@@ -16,7 +18,7 @@ open PRs #158, #161, and issue #190.
 | Column | clustered, stacked, 100% stacked, 3-D clustered/stacked/100%, 3-D column | 3 of 7 | no 3-D |
 | Bar | clustered, stacked, 100%, 3-D ×3 | 3 of 6 | no 3-D |
 | Line | line, stacked, 100% stacked, with markers ×3, 3-D line | 3 of 7 (line, with markers, stacked) | no 100% stacked; smoothed lines landed (#62) |
-| Pie | pie, 3-D pie, pie of pie, bar of pie, doughnut | 2 of 5 (pie, doughnut) | no exploded, pie of pie, bar of pie |
+| Pie | pie, 3-D pie, pie of pie, bar of pie, doughnut | 2 of 5 (pie, doughnut) | no exploded, pie of pie, bar of pie; doughnut draws every series as a concentric ring, first series outermost |
 | Area | area, stacked, 100%, 3-D ×3 | 2 of 6 | no 100%, no 3-D |
 | X Y (scatter) | markers, smooth lines (±markers), straight lines (±markers) | 2 of 5 | no smooth lines |
 | Bubble | bubble, 3-D bubble | 1 of 2 | |
@@ -41,6 +43,7 @@ open PRs #158, #161, and issue #190.
 | Data labels | value, category, series, percentage, from cells, callouts, position | one on/off flag |
 | Gridlines | major/minor per axis, formatting | one on/off flag |
 | Axis options | min/max/units, log scale, reverse order, crossing point, display units, date axis, number format | **missing** (auto only) |
+| Doughnut hole size, first slice angle | 10–90% hole, 0–359° first slice | Format Chart pane sliders; read from and written to `c:holeSize` / `c:firstSliceAng` |
 | Secondary axis | any series | line series in combo charts |
 | Trendlines | linear, exponential, logarithmic, polynomial, power, moving average, equation and R² | all six types, several per series, name, forward/backward forecast, set intercept, equation and R² label, line colour/width/dash; read, written and drawn on 2-D column, bar, line, area, scatter and bubble series; `chart.addElement` `trendline` adds/removes them. No Format Trendline pane, label position/number format not kept |
 | Error bars | fixed, %, standard deviation/error, custom | **missing** |
@@ -80,6 +83,7 @@ back.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | minor | Doughnut charts: every series is a ring (first outermost), hole size and first slice angle modelled, editable and round-tripped (#1823) |
 | 2026-10-12 | trivial | chart sheets are kept on save, still not editable (#727) |
 | 2026-10-11 | minor | Trendlines: all six types modelled, round-tripped through `c:trendline`, drawn with forecast and equation/R² labels; `chart.addElement` `trendline` |
 | 2026-10-11 | minor | PivotCharts (`insert.pivotChart`) |

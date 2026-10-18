@@ -90,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Chart Properties",
             ["Chart Design"],
             None,
-            "{chart?: id, type?, title?, legend?: none|bottom|top|left|right, dataLabels?, gridlines?, style?, xTitle?, yTitle?, at?, width?, height?, dx?, dy?}",
+            "{chart?: id, type?, title?, legend?: none|bottom|top|left|right, dataLabels?, gridlines?, style?, holeSize?, firstSliceAngle?, xTitle?, yTitle?, at?, width?, height?, dx?, dy?}",
             has_doc,
             chart_set
         ),
@@ -756,6 +756,8 @@ pub fn build_chart(s: &Session, p: &Json) -> Result<(usize, Chart)> {
         data_labels: false,
         gridlines: !matches!(kind, ChartKind::Pie | ChartKind::Doughnut | ChartKind::Treemap | ChartKind::Sunburst | ChartKind::Funnel),
         style: 1,
+        hole_size: 75,
+        first_slice_angle: 0,
         x_title: None,
         y_title: None,
         source: Some(format!("{}!{}", gridcraft_formula::quote_sheet(&sh.name), r.a1())),
@@ -814,6 +816,12 @@ fn chart_set(s: &mut Session, p: &Json) -> Result<Json> {
         }
         if let Some(v) = u32_param(p, "style") {
             c.style = v.clamp(1, 16);
+        }
+        if let Some(v) = u32_param(p, "holeSize") {
+            c.hole_size = v.clamp(10, 90) as u8;
+        }
+        if let Some(v) = u32_param(p, "firstSliceAngle") {
+            c.first_slice_angle = (v % 360) as u16;
         }
         if let Some(t) = p.get("xTitle") {
             c.x_title = t.as_str().map(str::to_string);
