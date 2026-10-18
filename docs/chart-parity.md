@@ -7,7 +7,7 @@ Excel's chart types and chart elements against GridCraft. Part of
 
 Sources: `crates/model/src/features.rs` (`ChartKind`, `Chart`, `Series`), `crates/chart/src`
 (layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62, #116,
-#158, #161 and #1819, and issue #190. Behaviour checked against Microsoft's
+#158 and #161, and issues #1819 and #190. Behaviour checked against Microsoft's
 [Pareto](https://support.microsoft.com/en-us/excel/create-a-pareto-chart) and
 [pie/doughnut](https://support.microsoft.com/en-us/excel/add-a-pie-chart) support pages.
 
