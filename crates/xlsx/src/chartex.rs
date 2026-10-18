@@ -293,6 +293,10 @@ pub fn write_chartex(wb: &Workbook, si: usize, ch: &Chart, names: &mut Vec<Strin
         _ => "clusteredColumn",
     };
     let pareto = ch.kind == ChartKind::Pareto;
+    // Excel stores one clusteredColumn series per value column and a paretoLine for each,
+    // hiding every column after the first. Opening a Pareto made from two value columns in
+    // Excel 365 and saving it keeps that shape (observed 2026-10-18); the hidden series are
+    // part of Excel's own file, so they stay here too.
     for (i, ser) in ch.series.iter().enumerate() {
         // Excel shows the first Pareto series and hides the rest.
         let hidden = if pareto && i > 0 { " hidden=\"1\"" } else { "" };
