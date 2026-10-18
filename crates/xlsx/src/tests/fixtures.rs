@@ -512,6 +512,80 @@ fn chartex_parts_as_excel_expects_them() {
     assert_eq!((s.name.as_deref(), s.categories.as_deref(), s.values.as_str()), (Some("Data!$B$1"), Some("Data!$A$2:$A$5"), "Data!$B$2:$B$5"));
 }
 
+#[test]
+fn pareto_chartex_parts() {
+    use gridcraft_model::{Chart, ChartKind, LegendPos, Series};
+    let mut wb = gridcraft_model::Workbook::new();
+    let mut sheet = gridcraft_model::Sheet::new("Data");
+    sheet.charts.push(Chart {
+        id: 1,
+        kind: ChartKind::Pareto,
+        anchor: Default::default(),
+        title: None,
+        series: vec![Series {
+            name: Some("Data!$B$1".into()),
+            categories: Some("Data!$A$2:$A$5".into()),
+            values: "Data!$B$2:$B$5".into(),
+            ..Default::default()
+        }],
+        legend: LegendPos::None,
+        data_labels: false,
+        gridlines: true,
+        style: 2,
+        x_title: None,
+        y_title: None,
+        source: None,
+        by_rows: false,
+        pivot: None,
+    });
+    wb.sheets = vec![std::sync::Arc::new(sheet)];
+    let bytes = crate::write_xlsx(&wb).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.clone())).unwrap();
+    let mut cx = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("xl/charts/chartEx1.xml").unwrap(), &mut cx).unwrap();
+    assert!(cx.contains("layoutId=\"clusteredColumn\""), "{cx}");
+    assert!(cx.contains("<cx:aggregation />") || cx.contains("<cx:aggregation/>"), "{cx}");
+    assert!(cx.contains("layoutId=\"paretoLine\" ownerIdx=\"0\""), "{cx}");
+    assert!(cx.contains("<cx:axisId val=\"1\"/>") && cx.contains("<cx:axisId val=\"2\"/>"), "{cx}");
+    assert!(cx.contains("<cx:units unit=\"percentage\"/>"), "{cx}");
+    assert!(cx.contains("<cx:valScaling max=\"1\" min=\"0\"/>"), "{cx}");
+    let (back, _) = crate::read_xlsx(&bytes).unwrap();
+    assert_eq!(back.sheet(0).unwrap().charts[0].kind, ChartKind::Pareto);
+}
+
+#[test]
+fn pareto_numeric_chartex_bins() {
+    use gridcraft_model::{Chart, ChartKind, LegendPos, Series};
+    let mut wb = gridcraft_model::Workbook::new();
+    let mut sheet = gridcraft_model::Sheet::new("Data");
+    sheet.charts.push(Chart {
+        id: 1,
+        kind: ChartKind::Pareto,
+        anchor: Default::default(),
+        title: None,
+        series: vec![Series { name: Some("Data!$A$1".into()), categories: None, values: "Data!$A$2:$A$7".into(), ..Default::default() }],
+        legend: LegendPos::None,
+        data_labels: false,
+        gridlines: true,
+        style: 2,
+        x_title: None,
+        y_title: None,
+        source: None,
+        by_rows: false,
+        pivot: None,
+    });
+    wb.sheets = vec![std::sync::Arc::new(sheet)];
+    let bytes = crate::write_xlsx(&wb).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.clone())).unwrap();
+    let mut cx = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("xl/charts/chartEx1.xml").unwrap(), &mut cx).unwrap();
+    assert!(cx.contains("<cx:binning intervalClosed=\"r\"/>"), "{cx}");
+    assert!(!cx.contains("<cx:strDim"), "{cx}");
+    let (back, _) = crate::read_xlsx(&bytes).unwrap();
+    let ch = &back.sheet(0).unwrap().charts[0];
+    assert_eq!((ch.kind, ch.series[0].categories.as_deref()), (ChartKind::Pareto, None));
+}
+
 /// #377: a WordArt-style text box keeps its run size, bold, typeface, text fill and outline, its
 /// centring (horizontal and vertical) and its "no outline" shape line, through a round trip.
 #[test]

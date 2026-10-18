@@ -1491,7 +1491,12 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
                     "insert.chart.scatter",
                     vec![("Scatter", "scatter", ""), ("Scatter with Lines", "scatter", "lines"), ("Bubble", "bubble", "")],
                 ),
-                (Icon::Chart, "Statistic", "insert.chart.statistic", vec![("Histogram", "histogram", ""), ("Box & Whisker", "boxWhisker", "")]),
+                (
+                    Icon::Chart,
+                    "Statistic",
+                    "insert.chart.statistic",
+                    vec![("Histogram", "histogram", ""), ("Pareto", "pareto", ""), ("Box & Whisker", "boxWhisker", "")],
+                ),
                 (
                     Icon::Theme,
                     "Hierarchy & more",
@@ -2377,6 +2382,7 @@ fn chart_design(app: &mut SheetApp, ui: &mut Ui) {
             ("Doughnut", "doughnut", ""),
             ("Scatter", "scatter", ""),
             ("Radar", "radar", ""),
+            ("Pareto", "pareto", ""),
             ("Waterfall", "waterfall", ""),
             ("Funnel", "funnel", ""),
             ("Treemap", "treemap", ""),
