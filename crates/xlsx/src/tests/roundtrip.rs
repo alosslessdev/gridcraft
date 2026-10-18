@@ -430,6 +430,7 @@ fn sample() -> Workbook {
     let mut doughnut = Chart { kind: ChartKind::Doughnut, hole_size: 25, first_slice_angle: 180, legend: LegendPos::Right, ..base_chart.clone() };
     doughnut.series.push(base_chart.series[0].clone());
     s.charts.push(doughnut);
+    s.charts.push(Chart { kind: ChartKind::Pareto, ..base_chart.clone() });
 
     wb.sheets = vec![Arc::new(s)];
     let mut s2 = Sheet::new("Hidden");

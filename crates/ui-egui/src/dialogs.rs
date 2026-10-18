@@ -2029,7 +2029,7 @@ fn name_manager(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mu
 }
 
 /// Every chart type the All Charts tab offers: `(type, subtype, label)` for `insert.chart`.
-const ALL_CHARTS: [(&str, &str, &str); 20] = [
+const ALL_CHARTS: [(&str, &str, &str); 21] = [
     ("column", "", "Clustered Column"),
     ("column", "stacked", "Stacked Column"),
     ("column", "stacked100", "100% Stacked Column"),
@@ -2047,6 +2047,7 @@ const ALL_CHARTS: [(&str, &str, &str); 20] = [
     ("scatter", "lines", "Scatter with Lines"),
     ("radar", "", "Radar"),
     ("histogram", "", "Histogram"),
+    ("pareto", "", "Pareto"),
     ("waterfall", "", "Waterfall"),
     ("funnel", "", "Funnel"),
     ("combo", "", "Combo"),

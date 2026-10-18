@@ -5,7 +5,7 @@ use gridcraft_model::{Anchor, Chart, ChartKind, Color, LegendPos, Series, Sparkl
 
 use crate::*;
 
-const ALL_KINDS: [ChartKind; 25] = [
+const ALL_KINDS: [ChartKind; 26] = [
     ChartKind::ColumnClustered,
     ChartKind::ColumnStacked,
     ChartKind::ColumnStacked100,
@@ -24,6 +24,7 @@ const ALL_KINDS: [ChartKind; 25] = [
     ChartKind::Bubble,
     ChartKind::Radar,
     ChartKind::Histogram,
+    ChartKind::Pareto,
     ChartKind::Waterfall,
     ChartKind::Funnel,
     ChartKind::Treemap,
@@ -197,12 +198,64 @@ fn doughnut_first_slice_angle_rotates_the_start() {
 }
 
 #[test]
+fn pareto_sorts_categories_and_draws_the_cumulative_line() {
+    let mut c = chart(ChartKind::Pareto);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.gridlines = false;
+    // A appears twice: Excel groups equal categories and sums them (A = 15).
+    let cats = ["A", "B", "A", "C"];
+    let vals = [10.0, 40.0, 5.0, 20.0];
+    let d = ChartData {
+        palette: vec![],
+        categories: cats.iter().map(|s| s.to_string()).collect(),
+        series: vec![series("Count", &vals, [20, 96, 130, 255], ChartKind::Pareto)],
+    };
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    let x_of = |label: &str| {
+        prims.iter().find_map(|p| match p {
+            Prim::Text { x, text, .. } if text == label => Some(*x),
+            _ => None,
+        })
+    };
+    let (a, b, cc) = (x_of("A").unwrap(), x_of("B").unwrap(), x_of("C").unwrap());
+    assert!(b < cc && cc < a, "grouped and sorted largest first: B C A");
+    // Three cumulative markers and the line itself.
+    assert_eq!(prims.iter().filter(|p| matches!(p, Prim::Circle { r, .. } if *r == 2.0)).count(), 3);
+    assert!(prims.iter().any(|p| matches!(p, Prim::Line { pts, .. } if pts.len() == 3)), "cumulative line");
+    let t = texts(&prims);
+    assert!(t.contains(&"100%"), "right percentage axis labels: {t:?}");
+}
+
+#[test]
+fn pareto_bins_numbers_when_there_is_no_category_range() {
+    let mut c = chart(ChartKind::Pareto);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.gridlines = false;
+    c.series.push(Series { name: Some("Values".into()), values: "Data!$A$1:$A$6".into(), ..Default::default() });
+    let d = ChartData {
+        palette: vec![],
+        categories: vec![],
+        series: vec![series("Values", &[1.0, 1.0, 1.0, 2.0, 2.0, 3.0], [20, 96, 130, 255], ChartKind::Pareto)],
+    };
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    assert_eq!(prims.iter().filter(|p| matches!(p, Prim::Circle { r, .. } if *r == 2.0)).count(), 3, "three bins");
+    assert!(prims.iter().any(|p| matches!(p, Prim::Line { pts, .. } if pts.len() == 3)), "cumulative line");
+    let t = texts(&prims);
+    assert!(t.iter().any(|s| s.starts_with('[') && s.contains(", ")), "bin labels: {t:?}");
+}
+
+#[test]
 fn legend_counts() {
     let d = sample(ChartKind::ColumnClustered);
     assert_eq!(legend_entries(&chart(ChartKind::ColumnClustered), &d).len(), 3);
     assert_eq!(legend_entries(&chart(ChartKind::Pie), &d).len(), 6);
     assert_eq!(legend_entries(&chart(ChartKind::Waterfall), &d).len(), 3);
     assert_eq!(legend_entries(&chart(ChartKind::Histogram), &d).len(), 0);
+    assert_eq!(legend_entries(&chart(ChartKind::Pareto), &d).len(), 2);
     let mut c = chart(ChartKind::Line);
     c.legend = LegendPos::None;
     assert!(legend_entries(&c, &d).is_empty());

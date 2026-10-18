@@ -1,13 +1,13 @@
 # Chart parity
 
-> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (doughnut charts: every series is a concentric ring; hole size and first slice angle kept) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (Pareto charts: sorted columns and a cumulative percentage line; doughnut charts: every series is a concentric ring, hole size and first slice angle kept) · **Target:** Microsoft Excel (Microsoft 365), Excel for Mac 16.113.4
 
 Excel's chart types and chart elements against GridCraft. Part of
 [target-app-parity.md](target-app-parity.md). **Breadth ~50%, ready ~30%, 40–60 h** (estimated).
 
 Sources: `crates/model/src/features.rs` (`ChartKind`, `Chart`, `Series`), `crates/chart/src`
-(layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62 and #116,
-open PRs #158, #161, and issue #190. Behaviour checked against Microsoft's
+(layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62, #116,
+#158, #161 and #1819, and issue #190. Behaviour checked against Microsoft's
 [Pareto](https://support.microsoft.com/en-us/excel/create-a-pareto-chart) and
 [pie/doughnut](https://support.microsoft.com/en-us/excel/add-a-pie-chart) support pages.
 
@@ -22,16 +22,16 @@ open PRs #158, #161, and issue #190. Behaviour checked against Microsoft's
 | Area | area, stacked, 100%, 3-D ×3 | 2 of 6 | no 100%, no 3-D |
 | X Y (scatter) | markers, smooth lines (±markers), straight lines (±markers) | 2 of 5 | no smooth lines |
 | Bubble | bubble, 3-D bubble | 1 of 2 | |
-| Stock | high-low-close, open-high-low-close, volume-HLC, volume-OHLC | 1 kind | combo/stock lose their kind in XLSX (PR #158) |
+| Stock | high-low-close, open-high-low-close, volume-HLC, volume-OHLC | 1 kind | |
 | Surface | 3-D surface, wireframe, contour, wireframe contour | 0 of 4 | |
 | Radar | radar, with markers, filled | 1 of 3 | |
-| Treemap, Sunburst | 1 each | 2 of 2 | lose their kind in XLSX (PR #161) |
-| Histogram, Pareto | 2 | 1 of 2 | no Pareto |
-| Box & Whisker | 1 | 1 of 1 | loses its kind in XLSX (PR #161) |
-| Waterfall, Funnel | 2 | 2 of 2 | lose their kind in XLSX (PR #161) |
+| Treemap, Sunburst | 1 each | 2 of 2 | |
+| Histogram, Pareto | 2 | 2 of 2 | Pareto groups equal categories and sums them, sorts descending, and bins numeric-only data like a histogram |
+| Box & Whisker | 1 | 1 of 1 | |
+| Waterfall, Funnel | 2 | 2 of 2 | |
 | Filled map | 1 | 0 | needs geographic boundary data (licensing decision) |
 | Combo | custom combinations, secondary axis | yes (line on secondary axis) | |
-| **Total** | ~60 subtypes | **25 (~42%)** | usage-weighted breadth higher (~65%): column, bar, line, pie and scatter dominate |
+| **Total** | ~60 subtypes | **26 (~43%)** | usage-weighted breadth higher (~65%): column, bar, line, pie and scatter dominate |
 
 ## Chart elements and formatting
 
@@ -71,18 +71,19 @@ back.
 
 ## Work (40–60 h)
 
-1. Kinds survive XLSX round-trip (merge PRs #158, #161): 2–4 h. Chart resizing (#190): 1–2 h.
+1. Chart resizing (#190): 1–2 h.
 2. Preserve unmodelled chart XML on round-trip (keep the original part, patch only edited fields): 6–10 h.
 3. Axis options, label options, gridlines per axis, legend formatting: 10–15 h.
 4. Error bars; Format Trendline pane (trendlines landed): 4–6 h.
 5. Per-element Format pane parity, smoothed lines, exploded pie, pie/bar of pie, 100% variants: 8–12 h.
-6. 3-D column/bar/pie/area, surface and contour, Pareto: 8–12 h.
+6. 3-D column/bar/pie/area, surface and contour: 8–12 h.
 7. Chart sheets, templates, PivotChart field buttons and multi-level categories: 6–10 h. Filled map: owner decision on boundary data.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | minor | Pareto charts: sorted columns, cumulative percentage line on a 0–100% axis, chartex read/write (#1819) |
 | 2026-10-17 | minor | Doughnut charts: every series is a ring (first outermost), hole size and first slice angle modelled, editable and round-tripped (#1823) |
 | 2026-10-12 | trivial | chart sheets are kept on save, still not editable (#727) |
 | 2026-10-11 | minor | Trendlines: all six types modelled, round-tripped through `c:trendline`, drawn with forecast and equation/R² labels; `chart.addElement` `trendline` |
