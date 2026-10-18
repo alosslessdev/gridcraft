@@ -1073,10 +1073,10 @@
   },
   {
    "seq": "NI1",
-   "kind": "command",
-   "target": "insert.chart",
+   "kind": "control",
+   "target": "insert.chart.waterfall",
    "excel": "Waterfall Chart",
-   "note": "Waterfall (kind TBD)"
+   "note": "Waterfall, Funnel, Stock or Radar"
   },
   {
    "seq": "NI2",
@@ -1186,10 +1186,10 @@
   },
   {
    "seq": "NSD",
-   "kind": "command",
-   "target": "insert.chart",
+   "kind": "control",
+   "target": "insert.chart.combo",
    "excel": "Combo Chart",
-   "note": "Combo (kind TBD)"
+   "note": "Combo"
   },
   {
    "seq": "NSF",
