@@ -197,6 +197,80 @@ fn doughnut_first_slice_angle_rotates_the_start() {
     assert!(first.is_some_and(|a| (a - std::f32::consts::FRAC_PI_2).abs() < 0.01), "{first:?}");
 }
 
+/// Every slice must occupy exactly its angular share, even when the first slice angle pushes the
+/// start past 12 o'clock (the split at TAU used to put whole slices over their neighbours).
+#[test]
+fn rotated_wedges_cover_each_slice_once_without_overlap() {
+    const TAU: f32 = std::f32::consts::TAU;
+    for kind in [ChartKind::Doughnut, ChartKind::Pie] {
+        for angle in [180u16, 270] {
+            let mut c = chart(kind);
+            c.title = None;
+            c.legend = LegendPos::None;
+            c.data_labels = false;
+            c.first_slice_angle = angle;
+            let d = ChartData {
+                palette: vec![[230, 126, 34, 255], [39, 174, 96, 255], [142, 68, 173, 255]],
+                categories: ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect(),
+                series: vec![series("Only", &[1.0; 4], [20, 96, 130, 255], kind)],
+            };
+            let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+            let wedges: Vec<(f32, f32)> = prims
+                .iter()
+                .filter_map(|p| match p {
+                    Prim::Wedge { a0, a1, .. } => Some((*a0, *a1)),
+                    _ => None,
+                })
+                .collect();
+            assert!(wedges.len() >= 4, "{kind:?} at {angle}: {wedges:?}");
+            for (a0, a1) in &wedges {
+                assert!((0.0..TAU).contains(a0), "{kind:?} at {angle}: start {a0} outside [0, TAU)");
+                assert!(*a1 > *a0 && *a1 <= TAU + 1e-4, "{kind:?} at {angle}: bad sweep {a0}..{a1}");
+            }
+            // Sample away from the boundaries: a correct four-slice chart covers every angle once.
+            let steps = 1440;
+            for k in 0..steps {
+                let theta = (k as f32 + 0.5) * TAU / steps as f32;
+                let cover = wedges.iter().filter(|(a0, a1)| theta >= *a0 && theta < *a1).count();
+                assert_eq!(cover, 1, "{kind:?} at {angle}: {theta} covered {cover} times by {wedges:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn doughnut_legend_names_categories_and_matches_every_ring() {
+    let mut c = chart(ChartKind::Doughnut);
+    c.title = None;
+    c.data_labels = false;
+    c.legend = LegendPos::Right;
+    c.first_slice_angle = 180;
+    let d = ChartData {
+        palette: vec![[230, 126, 34, 255], [39, 174, 96, 255], [142, 68, 173, 255]],
+        categories: ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect(),
+        series: vec![
+            series("Outer", &[1.0; 4], [20, 96, 130, 255], ChartKind::Doughnut),
+            series("Inner", &[1.0; 4], [221, 132, 82, 255], ChartKind::Doughnut),
+        ],
+    };
+    let entries = legend_entries(&c, &d);
+    assert_eq!(entries.iter().map(|(name, _, _)| name.as_str()).collect::<Vec<_>>(), ["A", "B", "C", "D"]);
+
+    let start = f32::from(c.first_slice_angle) * std::f32::consts::TAU / 360.0;
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    let mut rings = Vec::new();
+    for p in &prims {
+        let Prim::Wedge { r_outer, a0, a1, fill, .. } = p else { continue };
+        rings.push(*r_outer);
+        let rel = ((a0 + a1) / 2.0 - start).rem_euclid(std::f32::consts::TAU);
+        let cat = ((rel / (std::f32::consts::TAU / 4.0)) as usize).min(3);
+        assert_eq!(*fill, entries[cat].1, "ring wedge at {a0}..{a1} does not match legend entry {}", entries[cat].0);
+    }
+    rings.sort_by(f32::total_cmp);
+    rings.dedup();
+    assert_eq!(rings.len(), 2, "two series must draw two rings");
+}
+
 #[test]
 fn legend_counts() {
     let d = sample(ChartKind::ColumnClustered);

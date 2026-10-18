@@ -151,8 +151,8 @@ pub fn legend_entries(chart: &Chart, data: &ChartData) -> Vec<(String, Rgba, Swa
             let n = first_len(data).min(MAX_CATS);
             (0..n).map(|j| (cat_label(data, j), point_color(data, j), Swatch::Box)).collect()
         }
-        // A single-series doughnut names its slices; concentric rings name their series, as Excel does.
-        ChartKind::Doughnut if data.series.len() > 1 => data.series.iter().take(MAX_SERIES).map(|s| (s.name.clone(), s.color, Swatch::Box)).collect(),
+        // Excel's doughnut default varies colours by category, even with several series: every
+        // ring repeats the same category colours, so the legend names categories, not series.
         ChartKind::Doughnut => {
             let n = first_len(data).min(MAX_CATS);
             (0..n).map(|j| (cat_label(data, j), point_color(data, j), Swatch::Box)).collect()
@@ -1435,6 +1435,9 @@ fn wedge(ctx: &mut Ctx, cx: f32, cy: f32, r_outer: f32, r_inner: f32, a0: f32, s
     if sweep <= 1e-4 {
         return;
     }
+    // A slice that starts past 12 o'clock still has to be split against 12 o'clock, not against
+    // its unwrapped start: otherwise the half after TAU is drawn from 0 over its neighbours.
+    let a0 = a0.rem_euclid(TAU);
     let a1 = a0 + sweep;
     if a1 <= TAU {
         ctx.out.push(Prim::Wedge { cx, cy, r_outer, r_inner, a0, a1, fill, stroke });
