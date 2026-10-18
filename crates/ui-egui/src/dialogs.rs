@@ -2645,6 +2645,7 @@ const ALL_CHARTS: [(&str, &str, &str); 21] = [
     ("scatter", "lines", "Scatter with Lines"),
     ("radar", "", "Radar"),
     ("histogram", "", "Histogram"),
+    ("pareto", "", "Pareto"),
     ("waterfall", "", "Waterfall"),
     ("funnel", "", "Funnel"),
     ("combo", "", "Combo"),
