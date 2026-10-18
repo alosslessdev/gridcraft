@@ -25,9 +25,9 @@ const AXIS_TITLE_SIZE: f32 = 10.0;
 /// Most categories drawn by category-axis charts.
 const MAX_CATS: usize = 20_000;
 /// Lines with more points than this are decimated (min/max per pixel column).
-const MAX_LINE_PTS: usize = 2000;
+pub(crate) const MAX_LINE_PTS: usize = 2000;
 /// Most markers per series (after de-duplicating by pixel).
-const MAX_MARKERS: usize = 5000;
+pub(crate) const MAX_MARKERS: usize = 5000;
 /// Data labels are skipped when a series has more points than this.
 const MAX_LABELS: usize = 200;
 
@@ -1439,6 +1439,9 @@ fn pareto(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
         return;
     }
     let total: f64 = vals.iter().copied().sum();
+    // A cumulative percentage is only meaningful when every category is nonnegative. The binned
+    // path counts values, so its counts always are.
+    let cumulative = total.is_finite() && total != 0.0 && (binned || vals.iter().all(|v| *v >= 0.0));
     let cw = plot.w / n as f32;
     let bw = (cw * 0.72).clamp(1.0, 120.0);
     let y0 = plot.bottom() - ys.frac(0.0) * plot.h;
@@ -1456,7 +1459,7 @@ fn pareto(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
                 ctx.text(x, yv.max(y0) + 2.0, &t, LABEL_SIZE, TEXT, HAlign::Center, VAlign::Top);
             }
         }
-        if total.is_finite() && total != 0.0 {
+        if cumulative {
             cum += *v;
             let frac = (cum / total).clamp(0.0, 1.0) as f32;
             pts.push([x, plot.bottom() - frac * plot.h]);
@@ -1464,8 +1467,10 @@ fn pareto(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
     }
     if pts.len() >= 2 {
         let color = pareto_line_color(data);
-        ctx.line(pts.clone(), color, 1.5);
-        for p in pts {
+        // Keep the line and markers bounded on category-heavy charts, as the other renderers do.
+        let markers: Vec<[f32; 2]> = if cw >= 3.0 { pts.iter().take(MAX_MARKERS).copied().collect() } else { Vec::new() };
+        ctx.line(decimate(pts, MAX_LINE_PTS), color, 1.5);
+        for p in markers {
             ctx.out.push(Prim::Circle { cx: p[0], cy: p[1], r: 2.0, fill: Some(color), stroke: Some((WHITE, 0.75)) });
         }
     }
