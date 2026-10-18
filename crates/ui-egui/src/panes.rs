@@ -194,6 +194,18 @@ fn format_chart(app: &mut SheetApp, ui: &mut Ui) {
                 }
             }
         });
+        if matches!(chart.kind, gridcraft_chart::ChartKind::Pie | gridcraft_chart::ChartKind::Doughnut) {
+            let mut angle = u32::from(chart.first_slice_angle);
+            if ui.add(egui::Slider::new(&mut angle, 0..=359).text("First slice angle")).changed() {
+                app.run_or_alert("chart.set", json!({"chart": id, "firstSliceAngle": angle}));
+            }
+        }
+        if chart.kind == gridcraft_chart::ChartKind::Doughnut {
+            let mut hole = u32::from(chart.hole_size);
+            if ui.add(egui::Slider::new(&mut hole, 10..=90).text("Doughnut hole size")).changed() {
+                app.run_or_alert("chart.set", json!({"chart": id, "holeSize": hole}));
+            }
+        }
     });
     ui.collapsing("Legend", |ui| {
         ui.horizontal(|ui| {

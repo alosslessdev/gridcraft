@@ -44,6 +44,8 @@ fn chart(kind: ChartKind) -> Chart {
         data_labels: true,
         gridlines: true,
         style: 0,
+        hole_size: 75,
+        first_slice_angle: 0,
         x_title: Some("Quarter".into()),
         y_title: Some("Revenue".into()),
         source: None,
@@ -143,6 +145,56 @@ fn every_kind_renders_sanely() {
             assert!(n_shapes > 2, "{kind:?}: nothing drawn");
         }
     }
+}
+
+#[test]
+fn doughnut_draws_each_series_as_a_ring() {
+    let mut c = chart(ChartKind::Doughnut);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.hole_size = 25;
+    c.first_slice_angle = 0;
+    let d = ChartData {
+        palette: vec![],
+        categories: ["A", "B", "C"].iter().map(|s| s.to_string()).collect(),
+        series: vec![
+            series("Outer", &[1.0, 2.0, 3.0], [20, 96, 130, 255], ChartKind::Doughnut),
+            series("Middle", &[3.0, 2.0, 1.0], [221, 132, 82, 255], ChartKind::Doughnut),
+            series("Inner", &[1.0, 1.0, 1.0], [89, 161, 79, 255], ChartKind::Doughnut),
+        ],
+    };
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    let wedges: Vec<(f32, f32, f32)> = prims
+        .iter()
+        .filter_map(|p| match p {
+            Prim::Wedge { r_outer, r_inner, a0, .. } => Some((*r_outer, *r_inner, *a0)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(wedges.len(), 9, "three rings of three slices");
+    // The first series is outermost (Excel's order); the hole is 25% of the radius.
+    assert!(wedges[0].0 > wedges[3].0 && wedges[3].0 > wedges[6].0, "{wedges:?}");
+    assert!(wedges[6].1 > 0.0, "hole: {wedges:?}");
+}
+
+#[test]
+fn doughnut_first_slice_angle_rotates_the_start() {
+    let mut c = chart(ChartKind::Doughnut);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.first_slice_angle = 90;
+    let d = ChartData {
+        palette: vec![],
+        categories: ["A", "B"].iter().map(|s| s.to_string()).collect(),
+        series: vec![series("Only", &[1.0, 1.0], [20, 96, 130, 255], ChartKind::Doughnut)],
+    };
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    let first = prims.iter().find_map(|p| match p {
+        Prim::Wedge { a0, .. } => Some(*a0),
+        _ => None,
+    });
+    assert!(first.is_some_and(|a| (a - std::f32::consts::FRAC_PI_2).abs() < 0.01), "{first:?}");
 }
 
 #[test]
@@ -457,7 +509,11 @@ fn pie_starts_at_twelve_clockwise() {
     assert!(wedges.windows(2).all(|w| w[1].0 >= w[0].1 - 1e-4));
     assert!((wedges[5].1 - std::f32::consts::TAU).abs() < 1e-3);
     assert!(wedges.iter().all(|w| w.2 == 0.0 && w.3.map(|s| s.0) == Some([255; 4])));
-    let prims = render(&chart(ChartKind::Doughnut), &d, 400.0, 400.0, &ApproxMeasure);
+    let mut c = chart(ChartKind::Doughnut);
+    c.hole_size = 50;
+    let mut d = sample(ChartKind::Doughnut);
+    d.series.truncate(1);
+    let prims = render(&c, &d, 400.0, 400.0, &ApproxMeasure);
     let ok = prims.iter().any(|p| matches!(p, Prim::Wedge { r_outer, r_inner, .. } if (r_inner / r_outer - 0.5).abs() < 1e-3));
     assert!(ok);
 }

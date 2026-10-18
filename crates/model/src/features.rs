@@ -533,6 +533,10 @@ impl Trendline {
     }
 }
 
+fn default_hole_size() -> u8 {
+    75
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Chart {
     pub id: u32,
@@ -544,6 +548,12 @@ pub struct Chart {
     pub data_labels: bool,
     pub gridlines: bool,
     pub style: u32,
+    /// Doughnut hole size as a percentage of the plot radius (Excel's 10–90 range; default 75).
+    #[serde(default = "default_hole_size")]
+    pub hole_size: u8,
+    /// Pie/doughnut first slice angle in degrees clockwise from 12 o'clock (0–359).
+    #[serde(default)]
+    pub first_slice_angle: u16,
     pub x_title: Option<String>,
     pub y_title: Option<String>,
     /// Source range when created from a selection (for Switch Row/Column).
