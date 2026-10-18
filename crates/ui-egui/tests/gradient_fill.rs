@@ -1,8 +1,8 @@
 //! Format Cells › Fill: creating, cancelling and replacing a gradient through real controls.
 
 use egui::accesskit::Role;
-use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
-use egui_kittest::kittest::Queryable;
+use egui::{Event, Key, Modifiers, PointerButton, Pos2, pos2, vec2};
+use egui_kittest::kittest::{NodeT, Queryable};
 use gridcraft_engine::Session;
 use gridcraft_engine::core::CellRef;
 use gridcraft_engine::model::{Color, Fill, PatternType};
@@ -87,6 +87,37 @@ fn drag(h: &mut egui_kittest::Harness<'static, SheetApp>, from: Pos2, to: Pos2) 
     h.run_steps(3);
 }
 
+fn stop_slider(n: &egui_kittest::Node<'_>) -> bool {
+    let r = n.rect();
+    r.left() > 400.0 && r.top() > 340.0 && r.top() < 500.0
+}
+
+fn focused_stop(h: &egui_kittest::Harness<'static, SheetApp>) -> Option<usize> {
+    h.get_all_by_role(Role::Slider).filter(|n| stop_slider(n)).position(|n| n.accesskit_node().is_focused())
+}
+
+fn tab_until(h: &mut egui_kittest::Harness<'static, SheetApp>, want: usize) {
+    for _ in 0..400 {
+        if focused_stop(h) == Some(want) {
+            return;
+        }
+        h.key_press(Key::Tab);
+        h.step();
+    }
+    panic!("could not focus gradient stop {want}");
+}
+
+fn shift_tab_until(h: &mut egui_kittest::Harness<'static, SheetApp>, want: usize) {
+    for _ in 0..20 {
+        if focused_stop(h) == Some(want) {
+            return;
+        }
+        h.key_press_modifiers(Modifiers::SHIFT, Key::Tab);
+        h.step();
+    }
+    panic!("could not focus gradient stop {want} backwards");
+}
+
 #[test]
 fn dragging_a_stop_past_its_neighbour_keeps_editing_that_stop() {
     let mut h = harness();
@@ -95,13 +126,7 @@ fn dragging_a_stop_past_its_neighbour_keeps_editing_that_stop() {
     h.get_by_label("Gradient").click();
     h.run_steps(6);
 
-    let stops: Vec<_> = h
-        .get_all_by_role(Role::Slider)
-        .filter(|n| {
-            let r = n.rect();
-            r.left() > 400.0 && r.top() > 340.0 && r.top() < 500.0
-        })
-        .collect();
+    let stops: Vec<_> = h.get_all_by_role(Role::Slider).filter(|n| stop_slider(n)).collect();
     assert_eq!(stops.len(), 2, "two gradient stop sliders");
     let (first_rect, second_rect) = (stops[0].rect(), stops[1].rect());
 
@@ -121,6 +146,39 @@ fn dragging_a_stop_past_its_neighbour_keeps_editing_that_stop() {
     let first = gradient.stops.iter().find(|s| s.color == Color::Theme(4, 0)).expect("start stop");
     let second = gradient.stops.iter().find(|s| s.color == Color::Theme(0, 0)).expect("end stop");
     assert!(first.position > second.position, "the dragged stop kept its identity: {gradient:?}");
+    assert!(first.position > 0.6, "first stop should be near 80%: {gradient:?}");
+    assert!((0.3..0.7).contains(&second.position), "second stop should be near 50%: {gradient:?}");
+}
+
+#[test]
+fn keyboard_editing_a_stop_past_its_neighbour_keeps_editing_that_stop() {
+    let mut h = harness();
+    h.state_mut().open_dialog("formatCells", json!({"tab": "Fill"}));
+    h.run_steps(6);
+    h.get_by_label("Gradient").click();
+    h.run_steps(6);
+
+    // Focus the second stop with Tab and move it to roughly 50%.
+    tab_until(&mut h, 1);
+    for _ in 0..50 {
+        h.key_press(Key::ArrowLeft);
+        h.step();
+    }
+
+    // Move focus back to the first stop and drag its value past the second.
+    shift_tab_until(&mut h, 0);
+    for _ in 0..80 {
+        h.key_press(Key::ArrowRight);
+        h.step();
+    }
+    h.get_by_label("   OK   ").click();
+    h.run_steps(6);
+
+    let applied = fill(&h, "A1");
+    let gradient = applied.gradient.expect("gradient fill");
+    let first = gradient.stops.iter().find(|s| s.color == Color::Theme(4, 0)).expect("start stop");
+    let second = gradient.stops.iter().find(|s| s.color == Color::Theme(0, 0)).expect("end stop");
+    assert!(first.position > second.position, "the keyboard-edited stop kept its identity: {gradient:?}");
     assert!(first.position > 0.6, "first stop should be near 80%: {gradient:?}");
     assert!((0.3..0.7).contains(&second.position), "second stop should be near 50%: {gradient:?}");
 }
