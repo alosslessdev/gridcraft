@@ -993,6 +993,7 @@ pub(super) const DIALOGS: &[(&str, &str)] = &[
     ("No fill", "塗りつぶしなし"),
     ("Solid", "塗りつぶし"),
     ("Gradient", "グラデーション"),
+    ("Gradient|Stop", "グラデーションの停止位置"),
     ("Path", "パス"),
     ("Angle", "角度"),
     ("Diagonal up", "斜め上"),

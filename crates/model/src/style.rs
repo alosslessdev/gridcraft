@@ -308,9 +308,12 @@ impl Default for GradientKind {
 impl GradientKind {
     fn normalized(self) -> GradientKind {
         match self {
-            GradientKind::Linear { degree } => GradientKind::Linear { degree: if degree.is_finite() { degree.rem_euclid(360.0) } else { 0.0 } },
+            GradientKind::Linear { degree } => {
+                // `+ 0.0` turns `-0.0` into `+0.0`: the two compare equal but hash differently.
+                GradientKind::Linear { degree: if degree.is_finite() { degree.rem_euclid(360.0) + 0.0 } else { 0.0 } }
+            }
             GradientKind::Path { mut left, mut right, mut top, mut bottom } => {
-                let clamp = |v: f64| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.5 };
+                let clamp = |v: f64| if v.is_finite() { v.clamp(0.0, 1.0) + 0.0 } else { 0.5 };
                 left = clamp(left);
                 right = clamp(right);
                 top = clamp(top);
@@ -345,18 +348,14 @@ impl Hash for GradientFill {
 }
 
 impl GradientFill {
-    /// At most this many stops are kept; Excel's UI writes two and a hostile file cannot make
-    /// the renderer allocate without bound.
-    pub const MAX_STOPS: usize = 64;
-
     pub fn new(kind: GradientKind, stops: Vec<GradientStop>) -> GradientFill {
         let mut stops: Vec<GradientStop> = stops
             .into_iter()
             .filter(|s| s.position.is_finite())
-            .map(|s| GradientStop { position: s.position.clamp(0.0, 1.0), color: s.color })
+            // `+ 0.0` normalises `-0.0`: equality treats them as equal, so `Hash` must too.
+            .map(|s| GradientStop { position: s.position.clamp(0.0, 1.0) + 0.0, color: s.color })
             .collect();
         stops.sort_by(|a, b| a.position.partial_cmp(&b.position).unwrap_or(std::cmp::Ordering::Equal));
-        stops.truncate(Self::MAX_STOPS);
         if stops.is_empty() {
             stops.push(GradientStop { position: 0.0, color: Color::Auto });
         }
@@ -838,5 +837,36 @@ mod tests {
         assert_eq!(g.stops.iter().map(|s| s.position).collect::<Vec<_>>(), vec![0.0, 1.0]);
         assert_eq!(fill.pattern, PatternType::None);
         assert_eq!(Fill::solid(Color::Rgb(0xFF0000)).gradient, None);
+    }
+
+    #[test]
+    fn gradient_normalisation_agrees_with_hash() {
+        let stop = |p: f64| GradientStop { position: p, color: Color::Rgb(0xFF0000) };
+        let a = GradientFill::new(GradientKind::Linear { degree: -0.0 }, vec![stop(-0.0), stop(1.0)]);
+        let b = GradientFill::new(GradientKind::Linear { degree: 0.0 }, vec![stop(0.0), stop(1.0)]);
+        assert_eq!(a, b);
+        assert_eq!(a.kind, GradientKind::Linear { degree: 0.0 });
+        assert_eq!(a.stops[0].position.to_bits(), 0.0f64.to_bits());
+
+        let path = GradientFill::new(GradientKind::Path { left: -0.0, right: 0.0, top: -0.0, bottom: 0.0 }, vec![stop(0.5)]);
+        if let GradientKind::Path { left, right, top, bottom } = path.kind {
+            assert_eq!(left.to_bits(), 0.0f64.to_bits());
+            assert_eq!(top.to_bits(), 0.0f64.to_bits());
+            assert_eq!(right.to_bits(), 0.0f64.to_bits());
+            assert_eq!(bottom.to_bits(), 0.0f64.to_bits());
+        }
+
+        let fill = |g: GradientFill| Fill { pattern: PatternType::None, fg: Color::Auto, bg: Color::Auto, gradient: Some(g) };
+        let mut styles = StyleTable::default();
+        let ia = styles.intern(Style { fill: fill(a), ..Style::default() });
+        let ib = styles.intern(Style { fill: fill(b), ..Style::default() });
+        assert_eq!(ia, ib, "equal fills must intern to one StyleId");
+    }
+
+    #[test]
+    fn gradient_keeps_every_stop() {
+        let stops = (0..100).map(|i| GradientStop { position: i as f64 / 99.0, color: Color::Rgb(0x010000 + i) }).collect();
+        let g = GradientFill::new(GradientKind::Linear { degree: 0.0 }, stops);
+        assert_eq!(g.stops.len(), 100);
     }
 }

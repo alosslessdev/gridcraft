@@ -465,6 +465,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "Снизу",
         "Stop" => "Точка",
         "Add Stop" => "Добавить точку",
+        "Gradient|Stop" => "Точка градиента",
         _ => return None,
     })
 }

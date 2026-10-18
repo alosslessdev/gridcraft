@@ -2031,14 +2031,17 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
             ui.separator();
             let count = g.stops.len();
             let mut remove = None;
+            let mut dragging = false;
             for i in 0..count {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{}{}", lang.tr("Stop"), i + 1));
+                    ui.label(format!("{}{}", lang.tr("Gradient|Stop"), i + 1));
                     gradient_color_button(ui, &mut g.stops[i].color, theme);
                     let mut pct = g.stops[i].position * 100.0;
-                    if ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%")).changed() {
+                    let resp = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%"));
+                    if resp.changed() {
                         g.stops[i].position = pct / 100.0;
                     }
+                    dragging |= resp.dragged();
                     if count > 2 && ui.small_button("×").clicked() {
                         remove = Some(i);
                     }
@@ -2051,11 +2054,17 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
                 let color = g.stops.last().map(|s| s.color).unwrap_or(CellColor::Auto);
                 g.stops.push(GradientStop { position: 0.5, color });
             }
-            g = GradientFill::new(g.kind, g.stops);
+            // Sorting during a drag would move a different stop under the slider that is still
+            // being dragged. Keep the row order until release; only the preview is sorted.
+            let preview = GradientFill::new(g.kind, g.stops.clone());
             let (rect, _) = ui.allocate_exact_size(vec2(240.0, 54.0), Sense::hover());
-            crate::gradient::paint_rect(ui.painter(), rect, &g, theme);
+            crate::gradient::paint_rect(ui.painter(), rect, &preview, theme);
             ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(190)), StrokeKind::Inside);
-            *fill = Fill::gradient(g.kind, g.stops);
+            *fill = if dragging {
+                Fill { pattern: PatternType::None, fg: CellColor::Auto, bg: CellColor::Auto, gradient: Some(g) }
+            } else {
+                Fill::gradient(preview.kind, preview.stops)
+            };
         }
     }
 }

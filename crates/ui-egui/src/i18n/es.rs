@@ -495,6 +495,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "Inferior",
         "Stop" => "Parada",
         "Add Stop" => "Agregar parada",
+        "Gradient|Stop" => "Parada del degradado",
         _ => return None,
     })
 }

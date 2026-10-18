@@ -1,10 +1,11 @@
 //! Format Cells › Fill: creating, cancelling and replacing a gradient through real controls.
 
-use egui::vec2;
+use egui::accesskit::Role;
+use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
 use egui_kittest::kittest::Queryable;
 use gridcraft_engine::Session;
 use gridcraft_engine::core::CellRef;
-use gridcraft_engine::model::{Fill, PatternType};
+use gridcraft_engine::model::{Color, Fill, PatternType};
 use gridcraft_ui_egui::SheetApp;
 use serde_json::json;
 
@@ -71,4 +72,55 @@ fn gradient_can_be_created_cancelled_and_replaced_by_solid() {
     let solid = fill(&h, "A1");
     assert_eq!(solid.pattern, PatternType::Solid);
     assert!(solid.gradient.is_none());
+}
+
+fn drag(h: &mut egui_kittest::Harness<'static, SheetApp>, from: Pos2, to: Pos2) {
+    let press = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    h.input_mut().events.extend([Event::PointerMoved(from), press(from, true)]);
+    h.step();
+    for i in 1..=8 {
+        let t = i as f32 / 8.0;
+        h.input_mut().events.push(Event::PointerMoved(from + (to - from) * t));
+        h.step();
+    }
+    h.input_mut().events.push(press(to, false));
+    h.run_steps(3);
+}
+
+#[test]
+fn dragging_a_stop_past_its_neighbour_keeps_editing_that_stop() {
+    let mut h = harness();
+    h.state_mut().open_dialog("formatCells", json!({"tab": "Fill"}));
+    h.run_steps(6);
+    h.get_by_label("Gradient").click();
+    h.run_steps(6);
+
+    let stops: Vec<_> = h
+        .get_all_by_role(Role::Slider)
+        .filter(|n| {
+            let r = n.rect();
+            r.left() > 400.0 && r.top() > 340.0 && r.top() < 500.0
+        })
+        .collect();
+    assert_eq!(stops.len(), 2, "two gradient stop sliders");
+    let (first_rect, second_rect) = (stops[0].rect(), stops[1].rect());
+
+    // Move the second stop to roughly the middle.
+    drag(
+        &mut h,
+        pos2(second_rect.right() - 5.0, second_rect.center().y),
+        pos2(second_rect.left() + second_rect.width() * 0.5, second_rect.center().y),
+    );
+    // Drag the first stop from 0% past the second to roughly 80%.
+    drag(&mut h, pos2(first_rect.left() + 5.0, first_rect.center().y), pos2(first_rect.left() + first_rect.width() * 0.8, first_rect.center().y));
+
+    h.get_by_label("   OK   ").click();
+    h.run_steps(6);
+    let applied = fill(&h, "A1");
+    let gradient = applied.gradient.expect("gradient fill");
+    let first = gradient.stops.iter().find(|s| s.color == Color::Theme(4, 0)).expect("start stop");
+    let second = gradient.stops.iter().find(|s| s.color == Color::Theme(0, 0)).expect("end stop");
+    assert!(first.position > second.position, "the dragged stop kept its identity: {gradient:?}");
+    assert!(first.position > 0.6, "first stop should be near 80%: {gradient:?}");
+    assert!((0.3..0.7).contains(&second.position), "second stop should be near 50%: {gradient:?}");
 }

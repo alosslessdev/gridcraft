@@ -463,6 +463,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Bottom" => "아래",
         "Stop" => "중지",
         "Add Stop" => "중지 추가",
+        "Gradient|Stop" => "그라데이션 중지",
         _ => return None,
     })
 }
