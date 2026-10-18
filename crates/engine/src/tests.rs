@@ -2779,6 +2779,7 @@ fn every_chart_kind_survives_xlsx() {
         ("combo", ChartKind::Combo),
         ("stock", ChartKind::Stock),
         ("histogram", ChartKind::Histogram),
+        ("pareto", ChartKind::Pareto),
         ("boxWhisker", ChartKind::BoxWhisker),
         ("waterfall", ChartKind::Waterfall),
         ("funnel", ChartKind::Funnel),
