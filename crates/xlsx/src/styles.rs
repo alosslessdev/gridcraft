@@ -40,6 +40,8 @@ pub fn read_color(e: &El, palette: &[u32]) -> Color {
         if t > 11 {
             return Color::Auto;
         }
+        // Excel writes long tints (e.g. 0.399975585...); the model stores thousandths. The
+        // difference is below 0.0005 and does not change the rendered colour.
         let tint = e.attr_f64("tint").map(|v| (v * 1000.0).round().clamp(-1000.0, 1000.0) as i16).unwrap_or(0);
         return Color::Theme(t as u8, tint);
     }
@@ -154,6 +156,9 @@ fn pattern_name(p: PatternType) -> &'static str {
 /// can fall back to no fill.
 fn read_gradient_fill(g: &El, palette: &[u32]) -> Option<GradientFill> {
     let kind = match g.attr("type").unwrap_or("linear") {
+        // Excel writes its default (corner) path gradient as `type="path"` with no convergence
+        // attributes. OOXML defaults those to 0.0; do not substitute 0.5 here, or the gradient
+        // would change from corner to centre.
         "path" => GradientKind::Path {
             left: g.attr_f64("left").unwrap_or(0.0),
             right: g.attr_f64("right").unwrap_or(0.0),

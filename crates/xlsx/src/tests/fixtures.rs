@@ -734,3 +734,29 @@ fn excel_written_gradient_degrees_are_screen_angles() {
     assert_eq!(g135.position(1.0, 0.0), 0.0);
     assert_eq!(g135.position(0.0, 1.0), 1.0);
 }
+
+/// Excel writes a default path gradient as `<gradientFill type="path">` with no convergence
+/// attributes and renders it from the corner; theme stops keep full-precision tints.
+#[test]
+fn excel_written_path_and_theme_gradients_match_their_rendering() {
+    let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+      <fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+        <fill><gradientFill type="path"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+        <fill><gradientFill><stop position="0"><color theme="4" tint="0.39997558519241921"/></stop><stop position="1"><color theme="5" tint="-0.249977111117893"/></stop></gradientFill></fill>
+      </fills>
+      <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/></cellXfs>
+    </styleSheet>"#;
+    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
+    let body = r#"<sheetData><row r="1"><c r="A1" s="1"/><c r="B1" s="2"/></row></sheetData>"#;
+    let (wb, _) = read_xlsx(&minimal(body, &[("xl/styles.xml", styles)], rels, "")).unwrap();
+    let sh = wb.sheet(0).unwrap();
+
+    let path = wb.styles.get(sh.style_id(at("A1"))).fill.gradient.clone().expect("path gradient");
+    assert_eq!(path.kind, GradientKind::Path { left: 0.0, right: 0.0, top: 0.0, bottom: 0.0 });
+    assert_eq!(path.position(0.0, 0.0), 0.0);
+    assert_eq!(path.position(1.0, 1.0), 1.0);
+
+    let theme = wb.styles.get(sh.style_id(at("B1"))).fill.gradient.clone().expect("theme gradient");
+    assert_eq!(theme.stops[0].color, Color::Theme(4, 400));
+    assert_eq!(theme.stops[1].color, Color::Theme(5, -250));
+}
