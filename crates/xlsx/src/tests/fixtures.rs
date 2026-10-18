@@ -615,6 +615,54 @@ fn pareto_chartex_parts() {
 }
 
 #[test]
+fn pareto_multi_series_keeps_one_hidden_column_per_extra_series() {
+    use gridcraft_model::{Chart, ChartKind, LegendPos, Series};
+    // Excel 365 keeps the second value column as a hidden clusteredColumn plus its own
+    // paretoLine (observed by opening and re-saving such a chart). The writer must match.
+    let mut wb = gridcraft_model::Workbook::new();
+    let mut sheet = gridcraft_model::Sheet::new("Data");
+    sheet.charts.push(Chart {
+        id: 1,
+        kind: ChartKind::Pareto,
+        anchor: Default::default(),
+        title: None,
+        series: vec![
+            Series {
+                name: Some("Data!$B$1".into()),
+                categories: Some("Data!$A$2:$A$5".into()),
+                values: "Data!$B$2:$B$5".into(),
+                ..Default::default()
+            },
+            Series {
+                name: Some("Data!$C$1".into()),
+                categories: Some("Data!$A$2:$A$5".into()),
+                values: "Data!$C$2:$C$5".into(),
+                ..Default::default()
+            },
+        ],
+        legend: LegendPos::None,
+        data_labels: false,
+        gridlines: true,
+        style: 2,
+        x_title: None,
+        y_title: None,
+        source: None,
+        by_rows: false,
+        pivot: None,
+    });
+    wb.sheets = vec![std::sync::Arc::new(sheet)];
+    let bytes = crate::write_xlsx(&wb).unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut cx = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("xl/charts/chartEx1.xml").unwrap(), &mut cx).unwrap();
+    assert_eq!(cx.matches("layoutId=\"clusteredColumn\"").count(), 2, "{cx}");
+    assert_eq!(cx.matches("hidden=\"1\"").count(), 1, "one column hidden, as Excel writes it: {cx}");
+    assert_eq!(cx.matches("layoutId=\"paretoLine\"").count(), 2, "a cumulative line per column, as Excel writes it: {cx}");
+    assert!(cx.contains("ownerIdx=\"0\"") && cx.contains("ownerIdx=\"2\""), "{cx}");
+    assert!(cx.contains("<cx:data id=\"1\">"), "the hidden column keeps its data: {cx}");
+}
+
+#[test]
 fn pareto_numeric_chartex_bins() {
     use gridcraft_model::{Chart, ChartKind, LegendPos, Series};
     let mut wb = gridcraft_model::Workbook::new();

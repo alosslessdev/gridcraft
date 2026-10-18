@@ -6,8 +6,8 @@ Excel's chart types and chart elements against GridCraft. Part of
 [target-app-parity.md](target-app-parity.md). **Breadth ~50%, ready ~30%, 40–60 h** (estimated).
 
 Sources: `crates/model/src/features.rs` (`ChartKind`, `Chart`, `Series`), `crates/chart/src`
-(layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62, #116,
-#158 and #161, and issues #1819 and #190. Behaviour checked against Microsoft's
+(layout and rendering), `crates/xlsx/src/chart.rs` (DrawingML chart parts), merged PRs #62 and #116,
+open PRs #158, #161, and issues #1819 and #190. Behaviour checked against Microsoft's
 [Pareto](https://support.microsoft.com/en-us/excel/create-a-pareto-chart) support page.
 
 ## Chart types
@@ -21,10 +21,10 @@ Sources: `crates/model/src/features.rs` (`ChartKind`, `Chart`, `Series`), `crate
 | Area | area, stacked, 100%, 3-D ×3 | 3 of 6 | no 3-D; 100% stacked drawn as shares of each category's total and kept as `percentStacked` in XLSX |
 | X Y (scatter) | markers, smooth lines (±markers), straight lines (±markers) | 2 of 5 | no smooth lines |
 | Bubble | bubble, 3-D bubble | 1 of 2 | |
-| Stock | high-low-close, open-high-low-close, volume-HLC, volume-OHLC | 1 kind | |
+| Stock | high-low-close, open-high-low-close, volume-HLC, volume-OHLC | 1 kind | combo/stock lose their kind in XLSX (PR #158) |
 | Surface | 3-D surface, wireframe, contour, wireframe contour | 0 of 4 | |
 | Radar | radar, with markers, filled | 1 of 3 | |
-| Treemap, Sunburst | 1 each | 2 of 2 | |
+| Treemap, Sunburst | 1 each | 2 of 2 | lose their kind in XLSX (PR #161) |
 | Histogram, Pareto | 2 | 2 of 2 | Pareto groups equal categories and sums them, sorts descending, and bins numeric-only data like a histogram |
 | Box & Whisker | 1 | 1 of 1 | exclusive (default) and inclusive quartiles per series; XLSX round-trip; `chart.set {quartiles}` changes all series |
 | Waterfall, Funnel | 2 | 2 of 2 | lose their kind in XLSX (PR #161) |
@@ -77,7 +77,7 @@ are (#1686). Such series get no `numCache`/`strCache` on save (#1690).
 
 ## Work (40–60 h)
 
-1. Chart resizing (#190): 1–2 h.
+1. Kinds survive XLSX round-trip (merge PRs #158, #161): 2–4 h. Chart resizing (#190): 1–2 h.
 2. Preserve unmodelled chart XML on round-trip (keep the original part, patch only edited fields): 6–10 h.
 3. Axis options, label options, gridlines per axis, legend formatting: 10–15 h.
 4. Error bars; Format Trendline pane (trendlines landed): 4–6 h.

@@ -199,6 +199,15 @@ fn pareto_bins_numbers_when_there_is_no_category_range() {
 }
 
 #[test]
+fn pareto_legend_uses_the_supplied_label() {
+    let mut c = chart(ChartKind::Pareto);
+    c.legend = LegendPos::Bottom;
+    let d = sample(ChartKind::Pareto);
+    let entries = legend_entries_with(&c, &d, &ChartLabels { cumulative: "Kumuliert %" });
+    assert!(entries.iter().any(|(name, _, sw)| name == "Kumuliert %" && *sw == Swatch::Line), "{entries:?}");
+}
+
+#[test]
 fn legend_counts() {
     let d = sample(ChartKind::ColumnClustered);
     assert_eq!(legend_entries(&chart(ChartKind::ColumnClustered), &d).len(), 3);

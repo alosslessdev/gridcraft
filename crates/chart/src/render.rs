@@ -146,8 +146,27 @@ fn cat_label(data: &ChartData, j: usize) -> String {
     data.categories.get(j).cloned().unwrap_or_else(|| (j + 1).to_string())
 }
 
+/// Interface strings a chart legend can need. The UI passes translated text; the default is
+/// English for callers without an interface language (PDF export, tests).
+#[derive(Clone, Copy, Debug)]
+pub struct ChartLabels<'a> {
+    /// Legend name of a Pareto chart's cumulative line.
+    pub cumulative: &'a str,
+}
+
+impl Default for ChartLabels<'_> {
+    fn default() -> Self {
+        Self { cumulative: "Cumulative %" }
+    }
+}
+
 /// Legend entries (text, colour, swatch) `render` draws for this chart; empty when hidden.
 pub fn legend_entries(chart: &Chart, data: &ChartData) -> Vec<(String, Rgba, Swatch)> {
+    legend_entries_with(chart, data, &ChartLabels::default())
+}
+
+/// [`legend_entries`] with interface strings supplied by the UI.
+pub fn legend_entries_with(chart: &Chart, data: &ChartData, labels: &ChartLabels<'_>) -> Vec<(String, Rgba, Swatch)> {
     if chart.legend == LegendPos::None {
         return vec![];
     }
@@ -158,7 +177,7 @@ pub fn legend_entries(chart: &Chart, data: &ChartData) -> Vec<(String, Rgba, Swa
         }
         ChartKind::Histogram | ChartKind::Funnel | ChartKind::Stock => vec![],
         ChartKind::Pareto => match data.series.first() {
-            Some(s) => vec![(s.name.clone(), s.color, Swatch::Box), ("Cumulative %".into(), pareto_line_color(data), Swatch::Line)],
+            Some(s) => vec![(s.name.clone(), s.color, Swatch::Box), (labels.cumulative.to_string(), pareto_line_color(data), Swatch::Line)],
             None => vec![],
         },
         ChartKind::Waterfall => {
@@ -232,6 +251,11 @@ fn chart_title(chart: &Chart, data: &ChartData) -> Option<String> {
 
 /// Lays out and draws a chart into a `w`×`h` box at the origin. Empty for a degenerate box.
 pub fn render(chart: &Chart, data: &ChartData, w: f32, h: f32, m: &dyn Measure) -> Vec<Prim> {
+    render_with_labels(chart, data, w, h, m, &ChartLabels::default())
+}
+
+/// [`render`] with interface strings supplied by the UI.
+pub fn render_with_labels(chart: &Chart, data: &ChartData, w: f32, h: f32, m: &dyn Measure, labels: &ChartLabels<'_>) -> Vec<Prim> {
     if !(w.is_finite() && h.is_finite()) || w < 1.0 || h < 1.0 || w > 1e7 || h > 1e7 {
         return vec![];
     }
@@ -248,7 +272,7 @@ pub fn render(chart: &Chart, data: &ChartData, w: f32, h: f32, m: &dyn Measure) 
         area.y += used;
         area.h -= used;
     }
-    let entries = legend_entries(chart, &data);
+    let entries = legend_entries_with(chart, &data, labels);
     if !entries.is_empty() && area.ok() {
         area = draw_legend(&mut ctx, &entries, chart.legend, area);
     }
