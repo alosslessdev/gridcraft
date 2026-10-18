@@ -1,7 +1,7 @@
 //! Hand-written packages exercising specific reader paths.
 
 use gridcraft_core::{CellError, CellRef, DateSystem, RangeRef, Value};
-use gridcraft_model::{CalcMode, CfRule, Color, HAlign, PatternType, StyleId, Underline, Visibility};
+use gridcraft_model::{CalcMode, CfRule, Color, GradientKind, GradientStop, HAlign, PatternType, StyleId, Underline, Visibility};
 
 use super::minimal;
 use crate::read_xlsx;
@@ -146,7 +146,13 @@ fn styles_theme_and_sizes() {
     let st2 = wb.styles.get(s.cell(at("B1")).unwrap().style);
     assert_eq!(st2.num_fmt.as_str(), "m/d/yyyy");
     assert_eq!(st2.font.color, Color::Theme(4, -250));
-    assert_eq!(st2.fill.fg, Color::Rgb(0x00FF00), "gradient approximated by first stop");
+    let gradient = st2.fill.gradient.as_ref().expect("gradientFill is preserved");
+    assert_eq!(gradient.kind, GradientKind::Linear { degree: 90.0 });
+    assert_eq!(
+        gradient.stops,
+        vec![GradientStop { position: 0.0, color: Color::Rgb(0x00FF00) }, GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) },]
+    );
+    assert_eq!(st2.fill.pattern, PatternType::None);
     let st3 = wb.styles.get(s.cell(at("C1")).unwrap().style);
     assert_eq!(st3.num_fmt.as_str(), "0.00%");
     assert_eq!(st3.fill.pattern, PatternType::DarkGrid);

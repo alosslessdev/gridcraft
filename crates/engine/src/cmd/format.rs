@@ -82,7 +82,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Format Cells…",
             ["Home", "Cells", "Format"],
             Some("Cmd+1"),
-            "{range?, style: {font?, fill?, borders?, align?, numFmt?, protection?}} (partial Style JSON merged in)",
+            "{range?, style: {font?, fill?: {pattern?, fg?, bg?, gradient?: {kind: {Linear|Path}, stops: [{position, color}]}}, borders?, align?, numFmt?, protection?}} (partial Style JSON merged in; fill replaces the old fill)",
             has_doc,
             format_cells
         ),
@@ -520,11 +520,11 @@ fn format_cells(s: &mut Session, p: &Json) -> Result<Json> {
     };
     // Validate by merging into the active style once.
     let base = serde_json::to_value(active_style(s)?).map_err(|e| EngineError::Other(e.to_string()))?;
-    let merged = merge_json(base, &patch);
-    let _: Style = serde_json::from_value(merged).map_err(|e| bad("home.formatCells", e.to_string()))?;
+    let merged = merge_style_json(base, &patch);
+    let _: Style = parse_style(merged)?;
     apply_style(s, p, |st| {
         if let Ok(cur) = serde_json::to_value(&*st)
-            && let Ok(new) = serde_json::from_value::<Style>(merge_json(cur, &patch))
+            && let Ok(new) = parse_style(merge_style_json(cur, &patch))
         {
             *st = new;
         }
@@ -555,6 +555,23 @@ fn snake_case_keys(v: &Json) -> Json {
         ),
         other => other.clone(),
     }
+}
+
+fn parse_style(v: Json) -> Result<Style> {
+    let mut st: Style = serde_json::from_value(v).map_err(|e| bad("home.formatCells", e.to_string()))?;
+    st.fill.normalize();
+    Ok(st)
+}
+
+/// Deep-merges `patch` into `base` (objects merge, everything else replaces). The fill is
+/// replaced as a whole: a solid fill must be able to clear an older gradient.
+pub(crate) fn merge_style_json(mut base: Json, patch: &Json) -> Json {
+    if let (Json::Object(b), Json::Object(p)) = (&mut base, patch)
+        && let Some(fill) = p.get("fill")
+    {
+        b.insert("fill".into(), fill.clone());
+    }
+    merge_json(base, patch)
 }
 
 /// Deep-merges `patch` into `base` (objects merge, everything else replaces).
@@ -1278,5 +1295,22 @@ mod tests {
     fn width_units() {
         assert_eq!(chars_to_points(8.43), 64.0);
         assert!((points_to_chars(64.0) - 8.43).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_solid_fill_patch_clears_an_existing_gradient() {
+        use gridcraft_model::{Color, Fill, GradientKind, GradientStop, PatternType};
+        let mut s = crate::Session::new();
+        s.new_workbook();
+        let gradient = Fill::gradient(
+            GradientKind::Linear { degree: 90.0 },
+            vec![GradientStop { position: 0.0, color: Color::Rgb(0xFF0000) }, GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) }],
+        );
+        s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": gradient}})).unwrap();
+        s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": Fill::solid(Color::Rgb(0x00FF00))}})).unwrap();
+        let got = s.execute("cell.get", json!({"cell": "A1"})).unwrap();
+        let fill: Fill = serde_json::from_value(got["style"]["fill"].clone()).unwrap();
+        assert_eq!(fill.pattern, PatternType::Solid);
+        assert!(fill.gradient.is_none());
     }
 }
