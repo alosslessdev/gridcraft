@@ -1889,7 +1889,7 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
             ui.separator();
             let count = g.stops.len();
             let mut remove = None;
-            let mut dragging = false;
+            let mut editing = false;
             for i in 0..count {
                 ui.horizontal(|ui| {
                     ui.label(format!("{}{}", lang.tr("Gradient|Stop"), i + 1));
@@ -1899,7 +1899,9 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
                     if resp.changed() {
                         g.stops[i].position = pct / 100.0;
                     }
-                    dragging |= resp.dragged();
+                    // Keyboard changes set `changed` but not `dragged`; keep the row bound to
+                    // the same stop while its slider still owns focus as well.
+                    editing |= resp.dragged() || resp.has_focus();
                     if count > 2 && ui.small_button("×").clicked() {
                         remove = Some(i);
                     }
@@ -1912,13 +1914,14 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
                 let color = g.stops.last().map(|s| s.color).unwrap_or(CellColor::Auto);
                 g.stops.push(GradientStop { position: 0.5, color });
             }
-            // Sorting during a drag would move a different stop under the slider that is still
-            // being dragged. Keep the row order until release; only the preview is sorted.
+            // Sorting while a stop is being dragged or keyboard-edited would move a different
+            // stop under that slider. Keep the row order until the edit ends; only the preview
+            // is sorted.
             let preview = GradientFill::new(g.kind, g.stops.clone());
             let (rect, _) = ui.allocate_exact_size(vec2(240.0, 54.0), Sense::hover());
             crate::gradient::paint_rect(ui.painter(), rect, &preview, theme);
             ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(190)), StrokeKind::Inside);
-            *fill = if dragging {
+            *fill = if editing {
                 Fill { pattern: PatternType::None, fg: CellColor::Auto, bg: CellColor::Auto, gradient: Some(g) }
             } else {
                 Fill::gradient(preview.kind, preview.stops)
