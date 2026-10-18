@@ -478,6 +478,7 @@ impl Geo {
 struct Look {
     style: Style,
     fill: Option<Color32>,
+    gradient: Option<gridcraft_engine::model::GradientFill>,
     text_color: Color32,
 }
 
@@ -507,8 +508,8 @@ fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (
     if let Some(l) = &cfl
         && let Some(st) = &l.style
     {
-        if st.fill.pattern != PatternType::None {
-            style.fill = st.fill;
+        if st.fill.is_set() {
+            style.fill = st.fill.clone();
         }
         if st.font.color != Color::Auto {
             style.font.color = st.font.color;
@@ -540,27 +541,33 @@ fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (
             }
         }
     }
-    let mut fill = match style.fill.pattern {
-        PatternType::None => None,
-        PatternType::Solid => style.fill.fg.resolve(&wb.theme).map(theme::color32),
-        _ => {
-            // Patterns: approximate with a blend of foreground and background.
-            let fg = style.fill.fg.resolve(&wb.theme).unwrap_or([0, 0, 0]);
-            let bg = style.fill.bg.resolve(&wb.theme).unwrap_or([255, 255, 255]);
-            Some(Color32::from_rgb(
-                ((fg[0] as u16 + bg[0] as u16 * 3) / 4) as u8,
-                ((fg[1] as u16 + bg[1] as u16 * 3) / 4) as u8,
-                ((fg[2] as u16 + bg[2] as u16 * 3) / 4) as u8,
-            ))
+    let mut gradient = style.fill.gradient.clone();
+    let mut fill = if gradient.is_some() {
+        None
+    } else {
+        match style.fill.pattern {
+            PatternType::None => None,
+            PatternType::Solid => style.fill.fg.resolve(&wb.theme).map(theme::color32),
+            _ => {
+                // Patterns: approximate with a blend of foreground and background.
+                let fg = style.fill.fg.resolve(&wb.theme).unwrap_or([0, 0, 0]);
+                let bg = style.fill.bg.resolve(&wb.theme).unwrap_or([255, 255, 255]);
+                Some(Color32::from_rgb(
+                    ((fg[0] as u16 + bg[0] as u16 * 3) / 4) as u8,
+                    ((fg[1] as u16 + bg[1] as u16 * 3) / 4) as u8,
+                    ((fg[2] as u16 + bg[2] as u16 * 3) / 4) as u8,
+                ))
+            }
         }
     };
     if let Some(l) = &cfl
         && let Some(rgb) = l.scale_fill
     {
+        gradient = None;
         fill = Some(theme::color32(rgb));
     }
     let text_color = col32(style.font.color, wb, Color32::BLACK);
-    (Look { style, fill, text_color }, cfl)
+    (Look { style, fill, gradient, text_color }, cfl)
 }
 
 /// Text for a value with General narrowing to the available width.
@@ -1194,7 +1201,9 @@ pub(crate) fn paint_quadrant(
             None => (geo.cell_rect(sh, c), c),
         };
         let (lk, cfl) = look(wb, si, sh, anchor, cf);
-        if let Some(f) = lk.fill {
+        if let Some(g) = &lk.gradient {
+            crate::gradient::paint_rect(p, rect, g, &wb.theme);
+        } else if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
             p.rect_filled(rect.shrink(0.5), 0.0, Color32::WHITE);
@@ -3229,6 +3238,7 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
         PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
         _ => Color32::WHITE,
     };
+    let gradient = st.fill.gradient.clone();
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
         pos2(if cell.col >= geo.fc { split.x } else { geo.cells.left() }, if cell.row >= geo.fr { split.y } else { geo.cells.top() }),
@@ -3247,7 +3257,11 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let on_screen = cell_visible && erect.intersect(screen_quadrant).is_positive() && !geo.hidden_under_frozen(sh, cell);
     let clip = if on_screen { ui.clip_rect().intersect(screen_quadrant) } else { Rect::NOTHING };
     let painter = ui.painter().with_clip_rect(clip);
-    painter.rect_filled(erect, 0.0, fill);
+    if let Some(g) = &gradient {
+        crate::gradient::paint_rect(&painter, erect, g, &wb.theme);
+    } else {
+        painter.rect_filled(erect, 0.0, fill);
+    }
     painter.rect_stroke(erect.expand(1.0), 0.0, Stroke::new(2.0, Tokens::get(ui.ctx()).sel_border), StrokeKind::Middle);
     let id = egui::Id::unique("gridcraft.cell_editor");
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));

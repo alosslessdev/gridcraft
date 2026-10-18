@@ -6,7 +6,8 @@ use std::fmt::Write as _;
 
 use gridcraft_model::style::{DxfStated, Protection};
 use gridcraft_model::{
-    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, Style, Underline, VAlign, VertAlign, Workbook,
+    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, GradientFill, GradientKind, GradientStop, HAlign, NumFmt, PatternType, Style,
+    Underline, VAlign, VertAlign, Workbook,
 };
 
 use crate::tables::{INDEXED, builtin_format, builtin_id};
@@ -150,6 +151,28 @@ fn pattern_name(p: PatternType) -> &'static str {
     }
 }
 
+/// A `<gradientFill>` with all its stops. Malformed or empty gradients are rejected so callers
+/// can fall back to no fill.
+fn read_gradient_fill(g: &El, palette: &[u32]) -> Option<GradientFill> {
+    let kind = match g.attr("type").unwrap_or("linear") {
+        "path" => GradientKind::Path {
+            left: g.attr_f64("left").unwrap_or(0.0),
+            right: g.attr_f64("right").unwrap_or(0.0),
+            top: g.attr_f64("top").unwrap_or(0.0),
+            bottom: g.attr_f64("bottom").unwrap_or(0.0),
+        },
+        _ => GradientKind::Linear { degree: g.attr_f64("degree").unwrap_or(0.0) },
+    };
+    let stops: Vec<GradientStop> = g
+        .kids("stop")
+        .filter_map(|s| {
+            let color = s.child("color").map(|c| read_color(c, palette))?;
+            Some(GradientStop { position: s.attr_f64("position").unwrap_or(0.0), color })
+        })
+        .collect();
+    (!stops.is_empty()).then(|| GradientFill::new(kind, stops))
+}
+
 /// A `<fill>`. In differential formats a solid fill's colour is the *background* colour and the
 /// pattern type may be omitted.
 pub fn read_fill(e: &El, palette: &[u32], dxf: bool) -> Fill {
@@ -168,13 +191,12 @@ pub fn read_fill(e: &El, palette: &[u32], dxf: bool) -> Fill {
         if pattern == PatternType::None {
             return Fill::default();
         }
-        return Fill { pattern, fg, bg };
+        return Fill { pattern, fg, bg, gradient: None };
     }
-    if let Some(g) = e.child("gradientFill") {
-        // Approximated by the first stop's colour.
-        if let Some(c) = g.kids("stop").next().and_then(|s| s.child("color")) {
-            return Fill::solid(read_color(c, palette));
-        }
+    if let Some(g) = e.child("gradientFill")
+        && let Some(gradient) = read_gradient_fill(g, palette)
+    {
+        return Fill { pattern: PatternType::None, fg: Color::Auto, bg: Color::Auto, gradient: Some(gradient) };
     }
     Fill::default()
 }
@@ -292,7 +314,7 @@ fn read_xf(xf: &El, fonts: &[Font], fills: &[Fill], borders: &[Borders], fmts: &
         s.font = f.clone();
     }
     if let Some(f) = xf.attr_u32("fillId").and_then(|i| fills.get(i as usize)) {
-        s.fill = *f;
+        s.fill = f.clone();
     }
     if let Some(b) = xf.attr_u32("borderId").and_then(|i| borders.get(i as usize)) {
         s.borders = *b;
@@ -483,7 +505,31 @@ fn font_xml(f: &Font, dxf: Option<&DxfStated>, minor: bool) -> String {
     s
 }
 
+fn gradient_xml(g: &GradientFill) -> String {
+    let attrs = match g.kind {
+        GradientKind::Linear { degree } => {
+            if degree == 0.0 {
+                String::new()
+            } else {
+                format!(" degree=\"{}\"", num(degree))
+            }
+        }
+        GradientKind::Path { left, right, top, bottom } => {
+            format!(" type=\"path\" left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\"", num(left), num(right), num(top), num(bottom))
+        }
+    };
+    let mut s = format!("<fill><gradientFill{attrs}>");
+    for stop in &g.stops {
+        let _ = write!(s, "<stop position=\"{}\"><color {}/></stop>", num(stop.position), color_attrs(&stop.color));
+    }
+    s.push_str("</gradientFill></fill>");
+    s
+}
+
 fn fill_xml(f: &Fill, dxf: bool) -> String {
+    if let Some(g) = &f.gradient {
+        return gradient_xml(g);
+    }
     if f.pattern == PatternType::None {
         return "<fill><patternFill patternType=\"none\"/></fill>".into();
     }
@@ -630,8 +676,8 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
     let mut nf = NumFmts { custom: vec![], map: HashMap::new() };
     let mut fonts: Vec<Font> = vec![];
     let mut font_map = HashMap::new();
-    let mut fills: Vec<Fill> = vec![Fill::default(), Fill { pattern: PatternType::Gray125, fg: Color::Auto, bg: Color::Auto }];
-    let mut fill_map: HashMap<Fill, u32> = fills.iter().enumerate().map(|(i, f)| (*f, i as u32)).collect();
+    let mut fills: Vec<Fill> = vec![Fill::default(), Fill { pattern: PatternType::Gray125, fg: Color::Auto, bg: Color::Auto, gradient: None }];
+    let mut fill_map: HashMap<Fill, u32> = fills.iter().enumerate().map(|(i, f)| (f.clone(), i as u32)).collect();
     let mut borders: Vec<Borders> = vec![Borders::default()];
     let mut border_map: HashMap<Borders, u32> = HashMap::from([(Borders::default(), 0)]);
     // The default style's font is font 0.
