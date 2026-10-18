@@ -3,6 +3,7 @@ use std::sync::Arc;
 use gridcraft_core::{CellRef, Value};
 use gridcraft_model::{Anchor, Chart, ChartKind, Color, LegendPos, Series, SparklineKind, Style, Workbook};
 
+use crate::render::MAX_MARKERS;
 use crate::*;
 
 const ALL_KINDS: [ChartKind; 26] = [
@@ -195,6 +196,49 @@ fn pareto_bins_numbers_when_there_is_no_category_range() {
     assert!(prims.iter().any(|p| matches!(p, Prim::Line { pts, .. } if pts.len() == 3)), "cumulative line");
     let t = texts(&prims);
     assert!(t.iter().any(|s| s.starts_with('[') && s.contains(", ")), "bin labels: {t:?}");
+}
+
+#[test]
+fn pareto_skips_cumulative_line_for_signed_categories() {
+    let mut c = chart(ChartKind::Pareto);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.gridlines = false;
+    let d = ChartData {
+        palette: vec![],
+        categories: vec!["A".into(), "B".into()],
+        series: vec![series("Count", &[10.0, -5.0], [20, 96, 130, 255], ChartKind::Pareto)],
+    };
+    let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    let line_color = d.palette.get(1).copied().unwrap_or(d.series[0].color);
+    // A negative category makes the cumulative percentage meaningless, so no line or markers.
+    assert_eq!(prims.iter().filter(|p| matches!(p, Prim::Circle { r, .. } if *r == 2.0)).count(), 0);
+    assert!(!prims.iter().any(|p| matches!(p, Prim::Line { pts, color, .. } if *color == line_color && pts.len() > 2)));
+}
+
+#[test]
+fn pareto_caps_cumulative_line_and_markers() {
+    let mut c = chart(ChartKind::Pareto);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.gridlines = false;
+    let n = MAX_MARKERS + 1000;
+    let cats: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+    let vals: Vec<f64> = (0..n).map(|i| (i % 7 + 1) as f64).collect();
+    let d = ChartData { palette: vec![], categories: cats, series: vec![series("Count", &vals, [20, 96, 130, 255], ChartKind::Pareto)] };
+    // Wide enough for markers: they stop at MAX_MARKERS.
+    let wide = render(&c, &d, 30_000.0, 400.0, &ApproxMeasure);
+    assert_eq!(wide.iter().filter(|p| matches!(p, Prim::Circle { r, .. } if *r == 2.0)).count(), MAX_MARKERS);
+    // Narrow columns carry no marker information; the line is decimated instead.
+    let narrow = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
+    assert_eq!(narrow.iter().filter(|p| matches!(p, Prim::Circle { r, .. } if *r == 2.0)).count(), 0);
+    let longest = narrow.iter().filter_map(|p| match p {
+        Prim::Line { pts, .. } if pts.len() > 2 => Some(pts.len()),
+        _ => None,
+    });
+    assert!(longest.max().unwrap_or(0) < n, "the cumulative line is decimated");
 }
 
 #[test]
