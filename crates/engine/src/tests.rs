@@ -1644,6 +1644,52 @@ fn tables_and_structured_refs() {
 }
 
 #[test]
+fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty"], ["x", 2]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:B2", "header": true, "name": "Data"})).unwrap();
+    {
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        let t = &mut wb.sheet_mut(0).unwrap().tables[0];
+        t.table_type = Some("xml".into());
+        t.connection_id = Some(7);
+        t.columns[0].unique_name = Some("ItemID".into());
+        t.columns[0].xml =
+            Some(gridcraft_model::XmlColumnPr { map_id: 1, xpath: "/DataList/Item/Item".into(), data_type: "string".into(), denormalized: false });
+        t.filter = vec![(1, gridcraft_model::FilterCriterion::Values { values: vec!["2".into()], blanks: false })];
+    }
+    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].is_external());
+
+    s.execute("table.unlink", json!({"table": "Data"})).unwrap();
+    {
+        let d = s.doc().unwrap();
+        let t = &d.wb.active().unwrap().tables[0];
+        assert!(!t.is_external());
+        assert_eq!(t.table_type, None);
+        assert_eq!(t.connection_id, None);
+        assert!(t.columns.iter().all(|c| c.unique_name.is_none() && c.xml.is_none()));
+        assert_eq!(t.filter.len(), 1, "filter criteria stay");
+    }
+    assert_eq!(v(&s, "B2"), Value::Number(2.0), "the data stays");
+
+    // Undo restores the binding; unlinking again then saving writes a plain table.
+    s.execute("edit.undo", json!({})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].is_external());
+    s.execute("table.unlink", json!({"table": "Data"})).unwrap();
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "d.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
+    let d = s.doc().unwrap();
+    let t = &d.wb.active().unwrap().tables[0];
+    assert!(!t.is_external());
+    assert_eq!(t.filter.len(), 1);
+
+    // A plain table has nothing to unlink.
+    s.execute("insert.table", json!({"range": "D1:D2", "header": true, "name": "Plain"})).unwrap();
+    let e = s.execute("table.unlink", json!({"table": "Plain"})).unwrap_err();
+    assert!(e.to_string().contains("no external data"), "{e}");
+}
+
+#[test]
 fn structured_refs_to_columns_with_edge_spaces() {
     let mut s = s();
     s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty "], ["a", 2], ["b", 3]]})).unwrap();
