@@ -2704,7 +2704,7 @@ fn external_table_data(app: &mut SheetApp, ui: &mut Ui, tname: &str, external: b
     let refresh = ui
         .add_enabled_ui(false, |ui| {
             ui.set_opacity(0.4);
-            big_button(ui, Icon::Refresh, "Refresh", "Refresh needs a supported external data connection", true)
+            big_button(ui, Icon::Refresh, "Refresh", "Refresh needs a supported external data connection", false)
         })
         .inner;
     let _ = refresh.on_disabled_hover_text("Refresh needs a supported external data connection");
