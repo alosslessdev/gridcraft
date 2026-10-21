@@ -459,6 +459,15 @@ fn table_header(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
             if occupied {
                 return Err(EngineError::Other("A table can't overlap another table.".into()));
             }
+            // Writing the stored names back must not replace data typed into the row while the
+            // header was off (Excel refuses rather than lose it).
+            let replaced = cx
+                .wb
+                .sheet(si)
+                .is_some_and(|sh| (c0..=c1).any(|c| sh.cell(CellRef::new(new_start, c)).is_some_and(|x| x.formula.is_some() || !x.value.is_empty())));
+            if replaced {
+                return Err(EngineError::Other("To prevent possible loss of data, the header row can't replace existing cells.".into()));
+            }
             let names: Vec<String> = t.columns.iter().map(|c| c.name.clone()).collect();
             let Some(t) = cx.wb.sheet_mut(si).and_then(|sh| sh.tables.get_mut(ti)) else { return Ok(Json::Null) };
             t.range.start.row = new_start;

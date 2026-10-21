@@ -1758,6 +1758,12 @@ fn table_header_row_and_filter_button_toggle_like_excel() {
     let e = s.execute("table.filterButton", json!({"table": "T", "on": true})).unwrap_err();
     assert!(e.to_string().contains("Header Row"), "{e}");
 
+    // Data typed into the row that would become the header is not silently replaced.
+    s.execute("cell.set", json!({"cell": "A1", "input": "keep me"})).unwrap();
+    let e = s.execute("table.headerRow", json!({"table": "T", "on": true})).unwrap_err();
+    assert!(e.to_string().contains("loss of data"), "{e}");
+    s.execute("edit.clearContents", json!({"range": "A1"})).unwrap();
+
     // Header Row back on restores the stored column names; the filter stays off.
     s.execute("table.headerRow", json!({"table": "T", "on": true})).unwrap();
     {
