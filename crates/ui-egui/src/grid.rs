@@ -3109,7 +3109,10 @@ fn ink_on(fill: Color32) -> Color32 {
 
 /// The table whose header cell (`row`, `col`) was clicked, not just the first table in the column.
 fn filter_table_range(sh: &Sheet, col: u32, row: u32) -> Option<RangeRef> {
-    sh.tables.iter().find(|t| t.range.start.row == row && col >= t.range.start.col && col <= t.range.end.col).map(|t| t.range)
+    sh.tables
+        .iter()
+        .find(|t| t.range.start.row == row && col >= t.range.start.col && col <= t.range.end.col)
+        .map(|t| t.filter_range().unwrap_or(t.range))
 }
 
 fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {

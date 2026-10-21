@@ -1644,6 +1644,129 @@ fn tables_and_structured_refs() {
 }
 
 #[test]
+fn table_header_row_and_filter_button_toggle_like_excel() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:A3", "header": true, "name": "T"})).unwrap();
+    s.execute("data.filterBy", json!({"column": "A", "values": ["a"]})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().is_row_hidden(2), "the filter hid b");
+    s.execute("selection.set", json!({"cell": "A1"})).unwrap();
+
+    // Header Row off: the range drops the header row, its cells clear, and the filter goes.
+    s.execute("table.headerRow", json!({"table": "T", "on": false})).unwrap();
+    {
+        let d = s.doc().unwrap();
+        let sh = d.wb.active().unwrap();
+        let t = &sh.tables[0];
+        assert!(!t.header_row);
+        assert!(!t.filter_button, "turning the header off turns the filter buttons off");
+        assert_eq!(t.range.a1(), "A2:A3");
+        assert_eq!(t.columns[0].name, "H", "the column name is kept in the table definition");
+        assert!(sh.autofilter.is_none());
+        assert!(!sh.is_row_hidden(2), "turning the filter off reveals its rows");
+        assert!(sh.value(CellRef::new(0, 0)).is_empty(), "the header cell is cleared");
+        assert_eq!(sh.value(CellRef::new(1, 0)).display(), "a");
+        assert_eq!(d.selection.active, CellRef::new(1, 0), "the selection follows the table");
+    }
+
+    // The Filter Button needs a header row.
+    let e = s.execute("table.filterButton", json!({"table": "T", "on": true})).unwrap_err();
+    assert!(e.to_string().contains("Header Row"), "{e}");
+
+    // Header Row back on restores the stored column names; the filter stays off.
+    s.execute("table.headerRow", json!({"table": "T", "on": true})).unwrap();
+    {
+        let d = s.doc().unwrap();
+        let sh = d.wb.active().unwrap();
+        let t = &sh.tables[0];
+        assert!(t.header_row);
+        assert!(!t.filter_button);
+        assert_eq!(t.range.a1(), "A1:A3");
+        assert_eq!(sh.value(CellRef::new(0, 0)), Value::text("H"));
+    }
+
+    // Filter Button: off clears the criteria and reveals rows; on only brings the dropdown back.
+    s.execute("table.filterButton", json!({"table": "T", "on": true})).unwrap();
+    s.execute("data.filterBy", json!({"column": "A", "values": ["a"]})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().is_row_hidden(2));
+    s.execute("table.filterButton", json!({"table": "T", "on": false})).unwrap();
+    {
+        let d = s.doc().unwrap();
+        let sh = d.wb.active().unwrap();
+        assert!(!sh.tables[0].filter_button);
+        assert!(sh.autofilter.is_none());
+        assert!(!sh.is_row_hidden(2));
+    }
+    s.execute("table.filterButton", json!({"table": "T", "on": true})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].filter_button);
+
+    // A header-less table round-trips as headerRowCount="0" with its column names.
+    s.execute("table.headerRow", json!({"table": "T", "on": false})).unwrap();
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "t.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
+    let d = s.doc().unwrap();
+    let t = &d.wb.active().unwrap().tables[0];
+    assert!(!t.header_row);
+    assert_eq!(t.range.a1(), "A2:A3");
+    assert_eq!(t.columns[0].name, "H");
+}
+
+#[test]
+fn table_filter_off_reveals_only_filter_hidden_rows() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"], ["c"]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:A4", "header": true, "name": "T"})).unwrap();
+    s.execute("data.filterBy", json!({"column": "A", "values": ["a"]})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().is_row_hidden(2), "b is filtered out");
+    s.execute("home.hideRows", json!({"rows": "2:2"})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().is_row_hidden(1), "a is hidden by hand");
+
+    s.execute("table.filterButton", json!({"table": "T", "on": false})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert!(!sh.is_row_hidden(2), "the filter-hidden row comes back");
+    assert!(sh.is_row_hidden(1), "the manually hidden row stays hidden");
+}
+
+#[test]
+fn table_filter_off_clears_criteria_stored_in_the_table() {
+    // An XLSX table keeps its AutoFilter criteria on the table itself, not on a sheet AutoFilter.
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:A3", "header": true, "name": "T"})).unwrap();
+    {
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        let sh = wb.sheet_mut(0).unwrap();
+        sh.tables[0].filter = vec![(0, gridcraft_model::FilterCriterion::Values { values: vec!["a".into()], blanks: false })];
+        sh.rows.entry(2).or_default().hidden = true;
+    }
+    assert!(s.doc().unwrap().wb.active().unwrap().autofilter.is_none());
+
+    s.execute("table.filterButton", json!({"table": "T", "on": false})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert!(sh.tables[0].filter.is_empty());
+    assert!(!sh.is_row_hidden(2), "the row the table criteria hid comes back");
+}
+
+#[test]
+fn table_filter_off_with_a_totals_row_removes_the_filter() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H", "N"], ["a", 1], ["b", 2]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:B3", "header": true, "name": "T"})).unwrap();
+    s.execute("table.totalRow", json!({"table": "T", "on": true})).unwrap();
+    assert_eq!(s.doc().unwrap().wb.active().unwrap().tables[0].range.a1(), "A1:B4");
+    s.execute("data.filterBy", json!({"column": "A", "values": ["a"]})).unwrap();
+
+    s.execute("table.filterButton", json!({"table": "T", "on": false})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert!(sh.autofilter.is_none(), "the AutoFilter over the table is gone");
+    assert!(!sh.is_row_hidden(2), "b comes back");
+    assert!(!sh.is_row_hidden(3), "the totals row is not hidden");
+}
+
+#[test]
 fn structured_refs_to_columns_with_edge_spaces() {
     let mut s = s();
     s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty "], ["a", 2], ["b", 3]]})).unwrap();
