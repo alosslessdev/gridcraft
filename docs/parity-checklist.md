@@ -18,7 +18,7 @@ Each entry is an Excel ribbon or menu command (feature names only). It counts as
 | Review | 15 | 18 | 83% |
 | View | 20 | 20 | 100% |
 | Automate | 4 | 4 | 100% |
-| Table Design | 13 | 13 | 100% |
+| Table Design | 14 | 14 | 100% |
 | Chart Design | 8 | 8 | 100% |
 | Format | 3 | 3 | 100% |
 | PivotTable Analyze | 13 | 13 | 100% |
@@ -333,7 +333,7 @@ Implemented:
 - `automate.recordActions` Record Actions (Scripting Tools)
 - `automate.trustScripts` Trust Scripts (Scripting Tools)
 
-## Table Design (13 / 13, 100%)
+## Table Design (14 / 14, 100%)
 
 Implemented:
 
@@ -342,6 +342,7 @@ Implemented:
 - `table.summarizePivot` Summarize with PivotTable (Tools)
 - `table.removeDuplicates` Remove Duplicates (Tools)
 - `table.convertToRange` Convert to Range (Tools)
+- `table.unlink` Unlink (External Table Data)
 - `table.insertSlicer` Insert Slicer (Tools)
 - `table.headerRow` Header Row (Table Style Options)
 - `table.totalRow` Total Row (Table Style Options)
