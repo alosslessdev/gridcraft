@@ -129,6 +129,34 @@ fn pivot_groups_and_evaluates_measures() {
 }
 
 #[test]
+fn bidirectional_relationship_filters_do_not_recurse() {
+    let mut model = model();
+    model.tables.push(ModelTable {
+        name: "Products".into(),
+        columns: vec![ModelColumn { name: "Region".into(), data_type: Some("String".into()) }],
+        rows: vec![vec![Scalar::String("East".into())], vec![Scalar::String("West".into())]],
+    });
+    model.relationships.push(Relationship {
+        from_table: "Sales".into(),
+        from_column: "Region".into(),
+        to_table: "Products".into(),
+        to_column: "Region".into(),
+        bidirectional: true,
+        inactive: false,
+    });
+    model.parse_formulas().expect("model parses");
+    let evaluator = Evaluator::new(&model).expect("evaluator");
+    let expr = parse_expression("CALCULATE(SUM(Sales[Amount]), Products[Region] = \"East\")").expect("parse");
+    let bound = Binder::new(&model).bind_expression(&expr).expect("bind");
+    assert_eq!(evaluator.evaluate(&bound).expect("bidirectional filter"), Scalar::Decimal(40.0));
+
+    model.relationships.last_mut().expect("relationship").inactive = true;
+    let evaluator = Evaluator::new(&model).expect("evaluator");
+    let bound = Binder::new(&model).bind_expression(&expr).expect("bind");
+    assert_eq!(evaluator.evaluate(&bound).expect("inactive relationship is ignored"), Scalar::Decimal(60.0));
+}
+
+#[test]
 fn pivot_cross_puts_column_groups_in_columns() {
     let model = model();
     let rows = gridcraft_dax::pivot_fields(&model, &["Sales[Region]".into()]).expect("rows");

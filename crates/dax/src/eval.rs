@@ -185,9 +185,19 @@ impl<'a> Evaluator<'a> {
     }
 
     fn table(&self, table: usize, filters: &FilterContext) -> TableValue {
+        self.table_inner(table, filters, &mut BTreeSet::new())
+    }
+
+    fn table_inner(&self, table: usize, filters: &FilterContext, visited: &mut BTreeSet<usize>) -> TableValue {
         let Some(model_table) = self.model.tables.get(table) else {
             return TableValue::new(Vec::new(), Vec::new());
         };
+        // A bidirectional chain can lead back to a table already being filtered. Stop at the
+        // cycle instead of recursing forever; the direct filters on the other table still apply.
+        if !visited.insert(table) {
+            return TableValue::new(model_table.columns.iter().map(|column| TableColumn { name: column.name.clone() }).collect(), Vec::new())
+                .with_lineage(table);
+        }
         let mut rows: Vec<Vec<Scalar>> = model_table
             .rows
             .iter()
@@ -197,35 +207,36 @@ impl<'a> Evaluator<'a> {
             .cloned()
             .collect();
 
-        // Propagate filters across relationships: a filtered related table restricts this table
-        // to rows whose key appears in the related table.
+        // Propagate filters across active relationships: a filtered related table restricts this
+        // table to rows whose key appears in the related table.
         for relationship in &self.model.relationships {
+            if relationship.inactive {
+                continue;
+            }
             let (Some(from), Some(to)) = (self.model.table_index(&relationship.from_table), self.model.table_index(&relationship.to_table)) else {
                 continue;
             };
-            if from == table {
-                if let (Some(from_col), Some(to_col)) =
-                    (self.model.column_index(from, &relationship.from_column), self.model.column_index(to, &relationship.to_column))
-                {
-                    let keys: BTreeSet<ScalarKey> =
-                        self.table(to, filters).rows.iter().filter_map(|row| row.get(to_col)).map(ScalarKey::from).collect();
-                    if filters.filters.keys().any(|(t, _)| *t == to) {
-                        rows.retain(|row| row.get(from_col).is_some_and(|value| keys.contains(&ScalarKey::from(value))));
-                    }
-                }
-            } else if relationship.bidirectional
-                && to == table
-                && let (Some(from_col), Some(to_col)) =
-                    (self.model.column_index(from, &relationship.from_column), self.model.column_index(to, &relationship.to_column))
-            {
-                let keys: BTreeSet<ScalarKey> =
-                    self.table(from, filters).rows.iter().filter_map(|row| row.get(from_col)).map(ScalarKey::from).collect();
-                if filters.filters.keys().any(|(t, _)| *t == from) {
-                    rows.retain(|row| row.get(to_col).is_some_and(|value| keys.contains(&ScalarKey::from(value))));
-                }
+            let (other, self_column, other_column) = if from == table {
+                (to, &relationship.from_column, &relationship.to_column)
+            } else if relationship.bidirectional && to == table {
+                (from, &relationship.to_column, &relationship.from_column)
+            } else {
+                continue;
+            };
+            // Only a table that is actually filtered can restrict this one.
+            if !filters.filters.keys().any(|(filtered, _)| *filtered == other) || visited.contains(&other) {
+                continue;
             }
+            let (Some(self_col), Some(other_col)) = (self.model.column_index(table, self_column), self.model.column_index(other, other_column))
+            else {
+                continue;
+            };
+            let keys: BTreeSet<ScalarKey> =
+                self.table_inner(other, filters, visited).rows.iter().filter_map(|row| row.get(other_col)).map(ScalarKey::from).collect();
+            rows.retain(|row| row.get(self_col).is_some_and(|value| keys.contains(&ScalarKey::from(value))));
         }
 
+        visited.remove(&table);
         TableValue::new(model_table.columns.iter().map(|column| TableColumn { name: column.name.clone() }).collect(), rows).with_lineage(table)
     }
 
@@ -639,6 +650,9 @@ impl<'a> Evaluator<'a> {
             return Err(EvalError::new("RELATED needs a row context"));
         };
         for relationship in &self.model.relationships {
+            if relationship.inactive {
+                continue;
+            }
             let from = self.model.table_index(&relationship.from_table);
             let to = self.model.table_index(&relationship.to_table);
             if from == Some(frame.table) && to == Some(*table) {
