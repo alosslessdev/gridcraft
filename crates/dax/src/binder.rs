@@ -237,7 +237,7 @@ impl<'a> Binder<'a> {
             let keyword = match spec.name {
                 "DATEDIFF" if index == 2 => keyword_name(arg),
                 "DATATABLE" if index % 2 == 1 => keyword_name(arg),
-                _ => None,
+                _ => visual_keyword_name(spec.name, index, arg),
             };
             if let Some(keyword) = keyword {
                 args.push(BoundExpr::Keyword(keyword));
@@ -253,6 +253,38 @@ fn keyword_name(expr: &Expr) -> Option<String> {
     match &expr.kind {
         ExprKind::Name(name) if name.table.is_none() && name.name.style == crate::NameStyle::Bare => Some(name.name.text.clone()),
         _ => None,
+    }
+}
+
+/// Bare identifiers that visual-calculation functions accept where their syntax documents an
+/// axis, an ORDERBY flag, a blank-ordering enumeration or a reset clause. These words are not
+/// names in the model, so they must become [`BoundExpr::Keyword`] instead of failing resolution.
+fn visual_keyword_name(function: &str, index: usize, arg: &Expr) -> Option<String> {
+    let word = keyword_name(arg)?;
+    is_visual_keyword(function, index, &word).then_some(word)
+}
+
+/// Whether `word` is a documented keyword at the 0-based `index` of a visual-calculation call.
+///
+/// The positions mirror the Microsoft syntax for each function, e.g. `FIRST ( <column>[, <axis>]
+/// [, <orderBy>][, <blanks>][, reset] )` and `RANGE ( <step>[, <includeCurrent>][, <axis>]
+/// [, <orderBy>][, <blanks>][, <reset>] )`. `COLLAPSE`/`EXPAND` also have navigation-only forms
+/// whose first argument is the axis (`COLLAPSE ( <axis>[, N] )`).
+fn is_visual_keyword(function: &str, index: usize, word: &str) -> bool {
+    let axis = |positions: &[usize]| positions.contains(&index) && matches!(word.to_ascii_uppercase().as_str(), "ROWS" | "COLUMNS");
+    let order_by = |positions: &[usize]| positions.contains(&index) && word.eq_ignore_ascii_case("KEEP");
+    let blanks = |positions: &[usize]| positions.contains(&index) && matches!(word.to_ascii_uppercase().as_str(), "DEFAULT" | "FIRST" | "LAST");
+    let reset = |positions: &[usize]| {
+        positions.contains(&index) && matches!(word.to_ascii_uppercase().as_str(), "NONE" | "LOWESTPARENT" | "HIGHESTPARENT")
+    };
+    match function {
+        "COLLAPSE" | "EXPAND" | "COLLAPSEALL" | "EXPANDALL" => axis(&[0, 1]),
+        "FIRST" | "LAST" => axis(&[1]) || order_by(&[2]) || blanks(&[3]) || reset(&[4]),
+        "PREVIOUS" | "NEXT" => axis(&[2]) || order_by(&[3]) || blanks(&[4]) || reset(&[5]),
+        "MOVINGAVERAGE" => axis(&[3]) || order_by(&[4]) || blanks(&[5]) || reset(&[6]),
+        "RUNNINGSUM" => axis(&[1]) || order_by(&[2]) || blanks(&[3]) || reset(&[4]),
+        "RANGE" => axis(&[2]) || order_by(&[3]) || blanks(&[4]) || reset(&[5]),
+        _ => false,
     }
 }
 
