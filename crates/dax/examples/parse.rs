@@ -18,24 +18,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if text.is_empty() {
         return Err("no DAX expression supplied; pass it as an argument or on stdin".into());
     }
+    print!("{}", render(text)?);
+    Ok(())
+}
 
+/// Parses and renders one input. Queries are preferred; when the query parser fails, a valid
+/// expression is still accepted (`DEFINE` is a legal bare name), and the query diagnostic is kept
+/// only when both parsers fail for input that starts with a query keyword.
+fn render(text: &str) -> Result<String, String> {
     match parse_query(text) {
-        Ok(query) => {
-            println!("Query");
-            println!("{query:#?}");
-            println!("Canonical: {}", print_query(&query));
-        }
+        Ok(query) => Ok(format!("Query\n{query:#?}\nCanonical: {}\n", print_query(&query))),
         Err(query_error) => {
-            if starts_with_query_keyword(text) {
-                return Err(query_error.into());
-            }
-            let expr = parse_expression(text)?;
-            println!("AST");
-            println!("{expr:#?}");
-            println!("Canonical: {}", print_expression(&expr));
+            let expr = match parse_expression(text) {
+                Ok(expr) => expr,
+                Err(expr_error) => {
+                    if starts_with_query_keyword(text) {
+                        return Err(query_error.to_string());
+                    }
+                    return Err(expr_error.to_string());
+                }
+            };
+            Ok(format!("AST\n{expr:#?}\nCanonical: {}\n", print_expression(&expr)))
         }
     }
-    Ok(())
 }
 
 fn starts_with_query_keyword(text: &str) -> bool {
@@ -44,4 +49,18 @@ fn starts_with_query_keyword(text: &str) -> bool {
         Some(TokenKind::Ident(word)) => word.eq_ignore_ascii_case("DEFINE"),
         _ => false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn define_is_an_expression_but_malformed_define_keeps_the_query_error() {
+        assert!(render("DEFINE").expect("bare name expression").starts_with("AST"));
+        let error = render("DEFINE MEASURE").expect_err("malformed query");
+        assert!(error.contains("measure name"), "{error}");
+        assert!(starts_with_query_keyword("DEFINE MEASURE"));
+        assert!(!starts_with_query_keyword("SUM(Sales[Amount])"));
+    }
 }
