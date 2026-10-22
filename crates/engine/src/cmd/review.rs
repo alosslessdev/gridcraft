@@ -420,8 +420,8 @@ struct SheetPerformance {
 
 /// The cells Excel's Check Performance can remove: no value, no formula, but a stored non-default
 /// style. Notes and comments live outside the cell and never make a cell optimizable.
-fn optimizable(cell: &gridcraft_model::Cell) -> bool {
-    cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT
+fn optimizable(sh: &gridcraft_model::Sheet, at: CellRef, cell: &gridcraft_model::Cell) -> bool {
+    sh.merge_at(at).is_none() && cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT
 }
 
 /// Excel's volatile functions. `OFFSET`, `INDIRECT`, `CELL` and `INFO` are volatile in Excel but
@@ -456,7 +456,7 @@ fn check_performance(s: &mut Session, p: &Json) -> Result<Json> {
         let used = sh.cells.len() as u64;
         let mut sheet_optimizable = 0u64;
         for (at, cell) in sh.cells.iter() {
-            if !optimizable(cell) {
+            if !optimizable(sh, at, cell) {
                 continue;
             }
             sheet_optimizable += 1;
@@ -533,7 +533,8 @@ fn audit_calculation(s: &mut Session, p: &Json) -> Result<Json> {
                     }
                 }
                 Expr::Struct(sr) => {
-                    let all_columns = sr.col_start.is_none() && sr.col_end.is_none();
+                    let all_columns =
+                        sr.col_start.is_none() && sr.col_end.is_none() && sr.specifiers.iter().all(|item| matches!(item, StructItem::Data));
                     if all_columns || sr.specifiers.iter().any(|item| matches!(item, StructItem::All)) {
                         let mut label = if sr.table.is_empty() { "table".to_string() } else { sr.table.clone() };
                         label.push_str(if sr.specifiers.iter().any(|item| matches!(item, StructItem::All)) { "[#All]" } else { "[all columns]" });
@@ -674,7 +675,7 @@ fn optimize_performance(s: &mut Session, p: &Json) -> Result<Json> {
         }
         let mut cells = Vec::new();
         for (at, cell) in sh.cells.iter() {
-            if optimizable(cell) {
+            if optimizable(sh, at, cell) {
                 if selected >= OPTIMIZE_LIMIT {
                     truncated = true;
                     break;
@@ -993,6 +994,16 @@ mod tests {
         assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("B1").unwrap()).display(), "keep");
         s.execute("edit.undo", json!({})).unwrap();
         assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
+    }
+
+    #[test]
+    fn check_performance_skips_cells_inside_merged_ranges() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("home.bold", json!({"range": "A1:B1"})).unwrap();
+        s.execute("home.mergeCells", json!({"range": "A1:B1"})).unwrap();
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!(r["optimizableCells"], 0, "merged edge cells carry border/style state");
     }
 
     #[test]
