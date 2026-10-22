@@ -256,6 +256,9 @@ pub struct Session {
     /// Review › Notes › Show All Notes: every note is displayed. An application display setting
     /// (like Excel's comment indicator option), so it's not saved in the file.
     pub show_all_notes: bool,
+    /// Data Model loaded from a JSON model file (Power Pivot prototype). Application state, not
+    /// saved in the workbook.
+    pub dax_model: Option<gridcraft_dax::DataModel>,
 }
 
 impl Session {

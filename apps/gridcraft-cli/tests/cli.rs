@@ -176,6 +176,63 @@ fn check_exit_codes_and_json() {
 }
 
 #[test]
+fn dax_bind_resolves_model_names_and_measures() {
+    let dir = tmpdir("dax-bind");
+    let model = dir.join("model.json");
+    std::fs::write(
+        &model,
+        r#"{
+            "tables": [{"name":"Sales","columns":[{"name":"Region"},{"name":"Amount"}]}],
+            "relationships": [],
+            "measures": [
+                {"name":"Total Sales","formula":"SUM(Sales[Amount])","table":"Sales"},
+                {"name":"East Sales","formula":"CALCULATE([Total Sales], Sales[Region] = \"East\")","table":"Sales"}
+            ]
+        }"#,
+    )
+    .unwrap();
+    let model = model.to_str().unwrap();
+
+    let out = ok(&["dax", "bind", "--model", model, "SUM(Sales[Amount])"]);
+    assert!(out.contains("Call") && out.contains("Column"), "{out}");
+    let out = ok(&["dax", "bind", "--model", model, "--measure", "East Sales"]);
+    assert!(out.contains("Measure(") && out.contains("dependencies: Total Sales"), "{out}");
+
+    let o = run(&["dax", "bind", "--model", model, "Sales[Missing]"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("unknown column"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dax_eval_model_rows_and_measures() {
+    let dir = tmpdir("dax-eval");
+    let model = dir.join("model.json");
+    std::fs::write(
+        &model,
+        r#"{
+            "tables": [{"name":"Sales","columns":[{"name":"Region"},{"name":"Amount"}],
+                        "rows":[["East",10],["West",20],["East",30]]}],
+            "relationships": [],
+            "measures": [
+                {"name":"Total Sales","formula":"SUM(Sales[Amount])","table":"Sales"},
+                {"name":"East Sales","formula":"CALCULATE([Total Sales], Sales[Region] = \"East\")","table":"Sales"}
+            ]
+        }"#,
+    )
+    .unwrap();
+    let model = model.to_str().unwrap();
+
+    assert_eq!(ok(&["dax", "eval", "--model", model, "SUM(Sales[Amount])"]).trim(), "60.0");
+    assert_eq!(ok(&["dax", "eval", "--model", model, "--measure", "East Sales"]).trim(), "40.0");
+    let table = ok(&["dax", "eval", "--model", model, "--table", "FILTER(Sales, Sales[Amount] > 10)"]);
+    assert!(table.contains("\"columns\"") && table.contains("West"), "{table}");
+    let pivot = ok(&["dax", "pivot", "--model", model, "--measure", "Total Sales", "--rows", "Sales[Region]"]);
+    assert!(pivot.contains("East") && pivot.contains("40.0") && pivot.contains("West"), "{pivot}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn dax_format_parse_and_errors() {
     assert_eq!(ok(&["dax", "format", "1 + 2 * 3"]).trim(), "1 + 2 * 3");
     assert_eq!(ok(&["dax", "format", "(1 + 2) * 3"]).trim(), "(1 + 2) * 3");
