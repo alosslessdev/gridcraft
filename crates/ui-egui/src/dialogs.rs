@@ -811,6 +811,11 @@ impl Dialog {
                 d.result = app.session.run("review.checkAccessibility", json!({})).ok();
                 d
             }
+            "checkPerformance" => {
+                let mut d = Dialog::custom("checkPerformance", "Workbook Performance", json!({}));
+                d.result = Some(app.session.run("review.checkPerformance", json!({})).unwrap_or_else(|e| json!({"error": crate::clean_error(&e)})));
+                d
+            }
             "errorChecking" => {
                 let mut d = Dialog::custom("errorChecking", "Error Checking", json!({}));
                 d.result = app.session.run("formulas.errorChecking", json!({})).ok();
@@ -1150,6 +1155,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         "about" => 660.0,
         "insertFunction" | "commandSearch" | "nameManager" | "manageRules" | "journal" | "agents" | "macros" => 520.0,
         "recommendedCharts" => 600.0,
+        "checkPerformance" => 560.0,
         "analysisToolPak" => 420.0,
         "solver" => 460.0,
         "zoom" => 220.0,
@@ -1208,6 +1214,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                     });
                 }
                 "macros" => macros(app, ui, &mut d),
+                "checkPerformance" => check_performance(app, ui, &mut d, &mut open),
                 "statistics" | "accessibility" | "errorChecking" | "evaluateFormula" | "comments" => {
                     let r = if d.name == "comments" {
                         app.session.active().and_then(|doc| doc.wb.active().map(|s| json!(s.comments.iter().map(|(c, m)| json!({"cell": c.a1(), "author": m.author, "text": m.text})).collect::<Vec<_>>())))
@@ -2213,6 +2220,94 @@ fn zoom(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) 
         ui.label("%");
     });
     ok_cancel(ui, confirm, open);
+}
+
+/// Review › Check Performance: Excel's Workbook Performance pane. Categories and their counts
+/// summarise the audit; each finding keeps its sheet/cell, formula, reason and Go To target.
+/// Optimize only appears for the safe action the engine can prove (clearing unused formatting).
+fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mut bool) {
+    let report = d.result.clone().unwrap_or(Json::Null);
+    if let Some(error) = report.get("error").and_then(Json::as_str) {
+        ui.label(error);
+        if ui.button("Close").clicked() {
+            *open = false;
+        }
+        return;
+    }
+    let total = report.get("total").and_then(Json::as_u64).unwrap_or(0);
+    let cells = report.pointer("/scanned/cells").and_then(Json::as_u64).unwrap_or(0);
+    let formulas = report.pointer("/scanned/formulas").and_then(Json::as_u64).unwrap_or(0);
+    ui.label(format!("{cells} cells used · {formulas} formulas checked"));
+    let categories = report.get("categories").and_then(Json::as_array).cloned().unwrap_or_default();
+    if total == 0 {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("No performance issues found.").strong());
+    } else {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(format!("{total} performance issue{} found", if total == 1 { "" } else { "s" })).strong());
+        for category in &categories {
+            let count = category.get("count").and_then(Json::as_u64).unwrap_or(0);
+            if count > 0 {
+                ui.label(format!("{}: {count}", category.get("label").and_then(Json::as_str).unwrap_or("Other")));
+            }
+        }
+        let unused = categories.iter().find(|category| category.get("id").and_then(Json::as_str) == Some("unusedFormatting"));
+        if unused.and_then(|category| category.get("count")).and_then(Json::as_u64).unwrap_or(0) > 0 && ui.button("Optimize all").clicked() {
+            match app.session.run("review.optimizePerformance", json!({})) {
+                Ok(result) => app.toast = Some((format!("Optimized {} cells.", result["optimized"].as_u64().unwrap_or(0)), crate::now_ms())),
+                Err(e) => app.message = Some(("Workbook Performance".into(), crate::clean_error(&e))),
+            }
+            d.result = app.session.run("review.checkPerformance", json!({})).ok();
+            return;
+        }
+        ui.separator();
+        let issues = report.get("issues").and_then(Json::as_array).cloned().unwrap_or_default();
+        let (mut go_to, mut optimize_sheet) = (None, None);
+        egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+            for issue in &issues {
+                ui.horizontal(|ui| {
+                    let category = issue.get("categoryLabel").and_then(Json::as_str).unwrap_or("Issue");
+                    let sheet = issue.get("sheet").and_then(Json::as_str).unwrap_or("");
+                    let cell = issue.get("cell").and_then(Json::as_str).unwrap_or("");
+                    ui.label(egui::RichText::new(category).strong());
+                    ui.label(format!("{sheet}!{cell}"));
+                    if ui.button("Go To").clicked() {
+                        go_to = issue.get("goto").and_then(Json::as_str).map(str::to_string);
+                    }
+                    if issue.get("optimize").and_then(Json::as_str) == Some("clearFormatting") && ui.button("Optimize").clicked() {
+                        optimize_sheet = Some(json!(sheet));
+                    }
+                });
+                if let Some(formula) = issue.get("formula").and_then(Json::as_str) {
+                    ui.monospace(formula);
+                }
+                if let Some(reason) = issue.get("reason").and_then(Json::as_str) {
+                    ui.label(egui::RichText::new(reason).small());
+                }
+                ui.separator();
+            }
+        });
+        if report.get("truncated").and_then(Json::as_bool) == Some(true) {
+            let shown = report.get("shown").and_then(Json::as_u64).unwrap_or(0);
+            ui.label(format!("Showing the first {shown} of {total} issues."));
+        }
+        if let Some(reference) = go_to {
+            app.run_or_alert("edit.goTo", json!({"reference": reference}));
+            app.grid.ensure_visible = true;
+        }
+        if let Some(sheet) = optimize_sheet {
+            match app.session.run("review.optimizePerformance", json!({"sheet": sheet})) {
+                Ok(result) => app.toast = Some((format!("Optimized {} cells.", result["optimized"].as_u64().unwrap_or(0)), crate::now_ms())),
+                Err(e) => app.message = Some(("Workbook Performance".into(), crate::clean_error(&e))),
+            }
+            d.result = app.session.run("review.checkPerformance", json!({})).ok();
+            return;
+        }
+    }
+    ui.add_space(4.0);
+    if ui.button("Close").clicked() {
+        *open = false;
+    }
 }
 
 fn go_to(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {

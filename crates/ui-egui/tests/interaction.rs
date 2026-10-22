@@ -608,6 +608,46 @@ fn select_data_dialog_sets_the_category_axis_labels() {
 }
 
 #[test]
+fn check_performance_dialog_reports_issues_and_goes_to_the_cell() {
+    let mut s = blank();
+    s.execute("cell.set", json!({"cell": "B2", "input": "=NOW()"})).unwrap();
+    let mut h = harness(s);
+    h.state_mut().ui.ribbon_tab = "Review".into();
+    h.run_steps(2);
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    let d = h.state().dialog.as_ref().expect("the Workbook Performance pane opens");
+    assert_eq!(d.title, "Workbook Performance");
+    assert_eq!(d.result.as_ref().unwrap()["total"], 1);
+    assert_eq!(d.result.as_ref().unwrap()["issues"][0]["cell"], "B2");
+    h.get_by_label("Go To").click();
+    h.run_steps(2);
+    assert_eq!(h.state().session.active().unwrap().selection.active, CellRef::new(1, 1));
+    assert!(h.state().dialog.is_some(), "Go To keeps the pane open, as Excel does");
+}
+
+#[test]
+fn check_performance_dialog_says_when_there_is_nothing_to_fix() {
+    let mut h = harness(blank());
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    assert!(h.query_by_label("No performance issues found.").is_some());
+}
+
+#[test]
+fn check_performance_optimize_all_clears_unused_formatting_and_refreshes() {
+    let mut s = blank();
+    s.execute("home.bold", json!({"range": "A1"})).unwrap();
+    let mut h = harness(s);
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    assert!(h.query_by_label("Unused formatting: 1").is_some());
+    h.get_by_label("Optimize all").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("No performance issues found.").is_some());
+}
+
+#[test]
 fn dialogs_open_and_close() {
     let mut h = harness(blank());
     for name in [
