@@ -2399,7 +2399,11 @@ fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open
     let mut optimize_all = false;
     let mut optimize_sheet = None;
     let mut go_to = None;
-    if optimizable > 0 {
+    let actionable = sheets
+        .iter()
+        .filter(|s| s.get("protected").and_then(Json::as_bool) != Some(true))
+        .any(|s| s.get("optimizableCells").and_then(Json::as_u64).unwrap_or(0) > 0);
+    if actionable {
         optimize_all = ui.button("Optimize all").clicked();
     }
     ui.separator();
@@ -2450,7 +2454,7 @@ fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open
             Ok(result) => app.toast = Some((format!("Optimized {} cells.", result["optimized"].as_u64().unwrap_or(0)), crate::now_ms())),
             Err(e) => app.message = Some(("Workbook Performance".into(), crate::clean_error(&e))),
         }
-        d.result = app.session.run("review.checkPerformance", json!({})).ok();
+        d.result = Some(app.session.run("review.checkPerformance", json!({})).unwrap_or_else(|e| json!({"error": crate::clean_error(&e)})));
         return;
     }
     if let Some(sheet) = optimize_sheet {
@@ -2458,7 +2462,7 @@ fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open
             Ok(result) => app.toast = Some((format!("Optimized {} cells.", result["optimized"].as_u64().unwrap_or(0)), crate::now_ms())),
             Err(e) => app.message = Some(("Workbook Performance".into(), crate::clean_error(&e))),
         }
-        d.result = app.session.run("review.checkPerformance", json!({})).ok();
+        d.result = Some(app.session.run("review.checkPerformance", json!({})).unwrap_or_else(|e| json!({"error": crate::clean_error(&e)})));
         return;
     }
     if let Some(reference) = go_to {
