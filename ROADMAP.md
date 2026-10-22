@@ -135,7 +135,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | What landed |
 |---|---|
-| 2026-10-21 | Review › Check Performance: deterministic workbook audit (volatile formulas, full column/row, whole-table and oversized references, unused formatting), Workbook Performance pane with Go To and Optimize all; catalog 275 / 291 |
+| 2026-10-21 | Review › Check Performance: Excel's Workbook Performance pane (cells used, optimizable blank formatted cells, per-sheet Optimize all/sheet) plus opt-in `review.auditCalculation` extension (volatile, full column/row, whole-table and oversized references); catalog 275 / 291 |
 | 2026-10-21 | Page Setup paper sizes match Japanese Excel: `B4`/`B5`/`B6` are the JIS sizes (ISO B4/B5/B6 stay reachable by name), so a Japanese B5 worksheet prints at 182×257 mm; Japanese Postcard (100×148 mm), Double Postcard (148×200 mm), Envelope #3/#4 (120×235/90×205 mm), Kaku #2/#3 (240×332/216×277 mm) and A6 are added, both sizes reach the PDF page (`file.exportPdf`/`file.print` MediaBox) and the size survives an XLSX round-trip; the Page Layout Size menu lists them. `B4`/`B5` used to be the ISO sizes, which is changed here |
 | 2026-10-20 | Japanese interface catalog covers every key the Brazilian Portuguese catalog translates: the 398-label shared core plus 545 dialog, message, Backstage and menu strings (943 total, ~43% of ~2,200). A test parses `pt.rs`'s source, so the two catalogs stay in step |
 | 2026-10-20 | Interface translated into Dutch (518 labels: ribbon, context menus, File view, dialog titles, Options); `nl`, `nl-NL`, `nl-BE` locale tags resolve to Dutch |
@@ -221,7 +221,7 @@ Ranked; estimates in Opus 5.5 agent-hours. Detail and the full beta-gate list in
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-21 | minor | Review › Check Performance (`review.checkPerformance`) and the Workbook Performance pane; catalog 274 → 275 / 290 → 291 |
+| 2026-10-21 | minor | Review › Check Performance (`review.checkPerformance`): Workbook Performance pane for unused formatted cells, with opt-in `review.auditCalculation`; catalog 274 → 275 / 290 → 291 |
 | 2026-10-21 | minor | Page Setup paper sizes: JIS B4/B5/B6 (ISO by name), Japanese postcards and envelopes, A6; PDF page size follows, XLSX round-trips |
 | 2026-10-20 | minor | Dutch (nl) listed under other shipped languages; progress log row |
 | 2026-10-19 | minor | Progress log: long flat operator chains (#916) |

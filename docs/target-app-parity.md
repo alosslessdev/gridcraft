@@ -92,7 +92,7 @@ performance 8, stability 8, localization 4, hardware 2, platforms 2, ecosystem 2
 | What-if and analysis | 4 | ~50% | ~40% | 22–35 | Goal Seek, Scenario Manager, data tables, Analysis ToolPak (13 of 19 tools, no charts), Solver (Simplex LP, a local nonlinear method and Evolutionary; Answer and Limits reports; no Sensitivity report or options dialog). Missing: Forecast Sheet, Analyze Data |
 | Get & Transform, external data, data model | 5 | ~15% | ~10% | 60–100 | Import of CSV/TSV, JSON, HTML. No Power Query editor, no From Web, database or folder sources, no connections or refresh, no relationships or data model, no external workbook links (dropped with a warning) |
 | Insert objects | 3 | ~55% | ~45% | 25–40 | Pictures, 8 shape kinds (Excel has ~170), text boxes, own icon set, ink with Ink to Shape, hyperlinks, checkboxes. Missing: SmartArt, WordArt, equations, signature line, objects, 3-D models, screenshot, pictures in cells (PR #105) |
-| Review, comments, protection, collaboration | 4 | ~55% | ~40% | 35–55 | Threaded comments and notes with navigation, Show Comments/Show All Notes, Convert to Comments, spelling (system dictionary), thesaurus, sheet and workbook protection, Allow Edit Ranges with Excel-compatible password hashes (#307), Check Accessibility and Check Performance (volatile formulas, full column/row, whole-table and oversized references, unused formatting; Go To and safe Optimize all). Missing: Show Changes, co-authoring, real-time collaboration |
+| Review, comments, protection, collaboration | 4 | ~55% | ~40% | 35–55 | Threaded comments and notes with navigation, Show Comments/Show All Notes, Convert to Comments, spelling (system dictionary), thesaurus, sheet and workbook protection, Allow Edit Ranges with Excel-compatible password hashes (#307), Check Accessibility and Check Performance (Workbook Performance: used and optimizable cells per sheet, Optimize all/sheet; an opt-in `review.auditCalculation` extension reports volatile, full column/row, whole-table and oversized references). Missing: Show Changes, co-authoring, real-time collaboration |
 | Automation | 4 | ~30% | ~20% | 12–20 | Recorded, editable GridCraft scripts (Automate tab). VBA is out of scope by owner decision and is **dropped** when an `.xlsm` is opened (warning shown). No Office Scripts compatibility |
 | **Weighted** | 100 | **~75%** | **~59%** | **300–485** | |
 
@@ -334,7 +334,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-21 | minor | Review › Check Performance (calculation audit and Workbook Performance pane); catalog 274 → 275 / 290 → 291, no score change |
+| 2026-10-21 | minor | Review › Check Performance (Workbook Performance cleanup pane, plus opt-in calculation-audit extension); catalog 274 → 275 / 290 → 291, no score change |
 | 2026-10-21 | minor | Page Setup paper sizes: `B4`/`B5`/`B6` are the JIS sizes Japanese Excel uses (ISO B4/B5/B6 by name), and Japanese Postcard, Japanese Double Postcard, the chou/kaku envelopes and A6 are added; PDF MediaBox and `file.print` follow, and the Size menu lists them |
 | 2026-10-18 | trivial | Stale chart notes: all chart kinds survive XLSX round-trip (PRs #158, #161) and trendlines landed |
 | 2026-10-16 | minor | Advanced Filter copy-to clears only its actual output and rejects overflow without changing cells (#1031) |

@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Check Performance",
             ["Review", "Accessibility"],
             None,
-            "{limit?: number (default 500, max 5000)} → {version, total, truncated, issues, categories, sheets}",
+            "{limit?: number (default 500, max 5000)} → {version, usedCells, optimizableCells, truncated, sheets, cells}",
             has_doc,
             check_performance
         ),
@@ -58,9 +58,19 @@ pub fn specs() -> Vec<CommandSpec> {
             "Optimize Cells",
             ["Review", "Accessibility"],
             None,
-            "{sheet?: number | name} → {optimized, truncated, skippedProtected} (clears formatting from blank cells)",
+            "{sheet?: number | name} → {optimized, truncated, skippedProtected, sheets} (clears formatting from blank cells)",
             has_doc,
             optimize_performance
+        ),
+        cmd!(
+            query
+            "review.auditCalculation",
+            "Audit Calculation",
+            [],
+            None,
+            "{limit?: number (default 500, max 5000)} → {version, total, truncated, issues, categories, sheets} (extension: volatile and oversized references)",
+            has_doc,
+            audit_calculation
         ),
         cmd!(noundo "review.previousComment", "Previous Comment", ["Review", "Comments"], None, "{} → {sheet, cell}", has_comments, |s, _| {
             step_comment(s, false)
@@ -378,15 +388,14 @@ fn accessibility(s: &mut Session, _: &Json) -> Result<Json> {
 
 // ---------------------------------------------------------------- Check Performance
 
-const PERFORMANCE_CATEGORIES: &[(&str, &str)] = &[
+const AUDIT_CATEGORIES: &[(&str, &str)] = &[
     ("volatileFormula", "Volatile formulas"),
     ("fullColumnReference", "Full-column references"),
     ("fullRowReference", "Full-row references"),
     ("wholeTableReference", "Whole-table references"),
     ("oversizedRange", "Oversized ranges"),
-    ("unusedFormatting", "Unused formatting"),
 ];
-const PERFORMANCE_CATEGORY_COUNT: usize = PERFORMANCE_CATEGORIES.len();
+const AUDIT_CATEGORY_COUNT: usize = AUDIT_CATEGORIES.len();
 const PERFORMANCE_LIMIT: u64 = 500;
 const PERFORMANCE_MAX_LIMIT: u64 = 5_000;
 /// Ranges bigger than this are reported even when they are not a whole column or row.
@@ -400,7 +409,6 @@ const CAT_FULL_COLUMN: usize = 1;
 const CAT_FULL_ROW: usize = 2;
 const CAT_WHOLE_TABLE: usize = 3;
 const CAT_OVERSIZED: usize = 4;
-const CAT_UNUSED_FORMATTING: usize = 5;
 
 struct SheetPerformance {
     name: String,
@@ -408,6 +416,12 @@ struct SheetPerformance {
     cells: usize,
     formulas: usize,
     issues: u64,
+}
+
+/// The cells Excel's Check Performance can remove: no value, no formula, but a stored non-default
+/// style. Notes and comments live outside the cell and never make a cell optimizable.
+fn optimizable(cell: &gridcraft_model::Cell) -> bool {
+    cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT
 }
 
 /// Excel's volatile functions. `OFFSET`, `INDIRECT`, `CELL` and `INFO` are volatile in Excel but
@@ -427,13 +441,67 @@ fn goto_reference(sheet: &str, cell: CellRef) -> String {
     format!("'{}'!{}", sheet.replace('\'', "''"), cell.a1())
 }
 
-/// Review › Check Performance: a deterministic, read-only calculation audit. It walks stored
-/// cells only (never a whole column), so the cost is proportional to the used cells, and caps the
-/// issues returned while still counting every finding.
+/// Review › Check Performance: Excel's Workbook Performance pane data. It reports the cells used
+/// per sheet and how many are blank but still carry formatting, plus a bounded list of those
+/// cells. Walking stored cells keeps the cost proportional to the used cells, never a whole
+/// column. This is exactly Excel's documented feature; the calculation audit is
+/// [`audit_calculation`], opt-in and separate.
 fn check_performance(s: &mut Session, p: &Json) -> Result<Json> {
     let limit = p.get("limit").and_then(Json::as_u64).unwrap_or(PERFORMANCE_LIMIT).clamp(1, PERFORMANCE_MAX_LIMIT) as usize;
     let d = s.doc()?;
-    let mut counts = [0u64; PERFORMANCE_CATEGORY_COUNT];
+    let (mut used_cells, mut optimizable_cells) = (0u64, 0u64);
+    let mut cells: Vec<Json> = Vec::new();
+    let mut sheets: Vec<Json> = Vec::with_capacity(d.wb.sheets.len());
+    for (si, sh) in d.wb.sheets.iter().enumerate() {
+        let used = sh.cells.len() as u64;
+        let mut sheet_optimizable = 0u64;
+        for (at, cell) in sh.cells.iter() {
+            if !optimizable(cell) {
+                continue;
+            }
+            sheet_optimizable += 1;
+            if cells.len() < limit {
+                cells.push(json!({
+                    "sheet": sh.name,
+                    "sheetIndex": si,
+                    "cell": at.a1(),
+                    "style": cell.style.0,
+                    "reason": "Blank cell with stored formatting.",
+                    "optimize": "clearFormatting",
+                    "goto": goto_reference(&sh.name, at)
+                }));
+            }
+        }
+        used_cells += used;
+        optimizable_cells += sheet_optimizable;
+        sheets.push(json!({
+            "name": sh.name,
+            "index": si,
+            "usedCells": used,
+            "optimizableCells": sheet_optimizable,
+            "protected": sh.is_protected()
+        }));
+    }
+    let shown = cells.len() as u64;
+    Ok(json!({
+        "version": 1,
+        "usedCells": used_cells,
+        "optimizableCells": optimizable_cells,
+        "shown": shown,
+        "truncated": optimizable_cells > shown,
+        "limit": limit,
+        "sheets": sheets,
+        "cells": cells
+    }))
+}
+
+/// Extension, not Excel's Check Performance: a deterministic, read-only calculation audit. It
+/// walks stored cells only (never a whole column), so the cost is proportional to the used cells,
+/// and caps the issues returned while still counting every finding.
+fn audit_calculation(s: &mut Session, p: &Json) -> Result<Json> {
+    let limit = p.get("limit").and_then(Json::as_u64).unwrap_or(PERFORMANCE_LIMIT).clamp(1, PERFORMANCE_MAX_LIMIT) as usize;
+    let d = s.doc()?;
+    let mut counts = [0u64; AUDIT_CATEGORY_COUNT];
     let mut found: Vec<(usize, usize, CellRef, Json)> = Vec::new();
     let mut sheets: Vec<SheetPerformance> = Vec::with_capacity(d.wb.sheets.len());
     let (mut scanned_cells, mut scanned_formulas) = (0usize, 0usize);
@@ -442,31 +510,6 @@ fn check_performance(s: &mut Session, p: &Json) -> Result<Json> {
         let (mut sheet_cells, mut sheet_formulas, mut sheet_issues) = (0usize, 0usize, 0u64);
         for (at, cell) in sh.cells.iter() {
             sheet_cells += 1;
-            if cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT {
-                counts[CAT_UNUSED_FORMATTING] += 1;
-                sheet_issues += 1;
-                if found.len() < limit {
-                    found.push((
-                        CAT_UNUSED_FORMATTING,
-                        si,
-                        at,
-                        json!({
-                            "category": PERFORMANCE_CATEGORIES[CAT_UNUSED_FORMATTING].0,
-                            "categoryLabel": PERFORMANCE_CATEGORIES[CAT_UNUSED_FORMATTING].1,
-                            "sheet": sh.name,
-                            "sheetIndex": si,
-                            "cell": at.a1(),
-                            "range": at.a1(),
-                            "formula": Json::Null,
-                            "references": [],
-                            "functions": [],
-                            "reason": "Cell has formatting but no data; clearing it reduces workbook size and calculation overhead.",
-                            "optimize": "clearFormatting",
-                            "goto": goto_reference(&sh.name, at)
-                        }),
-                    ));
-                }
-            }
             let Some(formula) = &cell.formula else { continue };
             sheet_formulas += 1;
             let Some(expr) = formula.expr_arc() else { continue };
@@ -514,8 +557,8 @@ fn check_performance(s: &mut Session, p: &Json) -> Result<Json> {
                         si,
                         at,
                         json!({
-                            "category": PERFORMANCE_CATEGORIES[category].0,
-                            "categoryLabel": PERFORMANCE_CATEGORIES[category].1,
+                            "category": AUDIT_CATEGORIES[category].0,
+                            "categoryLabel": AUDIT_CATEGORIES[category].1,
                             "sheet": sh.name,
                             "sheetIndex": si,
                             "cell": at.a1(),
@@ -581,7 +624,7 @@ fn check_performance(s: &mut Session, p: &Json) -> Result<Json> {
     let total: u64 = counts.iter().sum();
     let issues: Vec<Json> = found.into_iter().map(|(_, _, _, issue)| issue).collect();
     let categories: Vec<Json> =
-        PERFORMANCE_CATEGORIES.iter().enumerate().map(|(i, (id, label))| json!({"id": id, "label": label, "count": counts[i]})).collect();
+        AUDIT_CATEGORIES.iter().enumerate().map(|(i, (id, label))| json!({"id": id, "label": label, "count": counts[i]})).collect();
     let sheet_rows: Vec<Json> = sheets
         .iter()
         .map(|sheet| {
@@ -618,9 +661,10 @@ fn optimize_performance(s: &mut Session, p: &Json) -> Result<Json> {
     let d = s.doc()?;
     let mut plan: Vec<(usize, Vec<CellRef>)> = Vec::new();
     let mut skipped: Vec<Json> = Vec::new();
+    let mut per_sheet: Vec<Json> = Vec::new();
     let mut selected = 0usize;
     let mut truncated = false;
-    'sheets: for (si, sh) in d.wb.sheets.iter().enumerate() {
+    for (si, sh) in d.wb.sheets.iter().enumerate() {
         if target.is_some_and(|target| target != si) {
             continue;
         }
@@ -630,21 +674,25 @@ fn optimize_performance(s: &mut Session, p: &Json) -> Result<Json> {
         }
         let mut cells = Vec::new();
         for (at, cell) in sh.cells.iter() {
-            if cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT {
+            if optimizable(cell) {
                 if selected >= OPTIMIZE_LIMIT {
                     truncated = true;
-                    break 'sheets;
+                    break;
                 }
                 cells.push(at);
                 selected += 1;
             }
         }
+        per_sheet.push(json!({"name": sh.name, "index": si, "optimized": cells.len()}));
         if !cells.is_empty() {
             plan.push((si, cells));
         }
+        if truncated {
+            break;
+        }
     }
     if selected == 0 {
-        return Ok(json!({"optimized": 0, "truncated": truncated, "skippedProtected": skipped}));
+        return Ok(json!({"optimized": 0, "truncated": truncated, "skippedProtected": skipped, "sheets": per_sheet}));
     }
     edit(s, |cx| {
         for (si, cells) in plan {
@@ -655,7 +703,7 @@ fn optimize_performance(s: &mut Session, p: &Json) -> Result<Json> {
         }
         Ok(Json::Null)
     })?;
-    Ok(json!({"optimized": selected, "truncated": truncated, "skippedProtected": skipped}))
+    Ok(json!({"optimized": selected, "truncated": truncated, "skippedProtected": skipped, "sheets": per_sheet}))
 }
 
 #[cfg(test)]
@@ -845,6 +893,8 @@ mod tests {
         assert!(crate::catalog::CATALOG.iter().any(|(id, tab, group, label)| {
             *id == "review.checkPerformance" && *tab == "Review" && *group == "Accessibility" && *label == "Check Performance"
         }));
+        let audit = crate::find_command("review.auditCalculation").expect("extension command registered");
+        assert_eq!((audit.label, audit.menu), ("Audit Calculation", &[][..]));
     }
 
     #[test]
@@ -852,15 +902,132 @@ mod tests {
         let mut s = Session::new();
         s.new_workbook();
         let r = s.execute("review.checkPerformance", json!({})).unwrap();
-        assert_eq!((r["version"].as_u64(), r["total"].as_u64(), r["truncated"].as_bool()), (Some(1), Some(0), Some(false)));
-        assert_eq!(r["issues"], json!([]));
-        assert_eq!(r["scanned"], json!({"cells": 0, "formulas": 0}));
-        assert_eq!(r["categories"].as_array().unwrap().len(), PERFORMANCE_CATEGORY_COUNT);
-        assert!(r["categories"].as_array().unwrap().iter().all(|c| c["count"] == 0));
+        assert_eq!(
+            (r["version"].as_u64(), r["usedCells"].as_u64(), r["optimizableCells"].as_u64(), r["truncated"].as_bool()),
+            (Some(1), Some(0), Some(0), Some(false))
+        );
+        assert_eq!(r["cells"], json!([]));
+        assert_eq!(r["shown"], 0);
+        assert_eq!(r["sheets"], json!([{"name": "Sheet1", "index": 0, "usedCells": 0, "optimizableCells": 0, "protected": false}]));
+        // The Excel-parity response has no calculation-audit categories.
+        assert!(r.get("categories").is_none() && r.get("issues").is_none() && r.get("total").is_none());
     }
 
     #[test]
-    fn check_performance_flags_volatile_functions_and_leaves_ordinary_formulas_alone() {
+    fn check_performance_counts_used_and_blank_formatted_cells() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("cell.set", json!({"cell": "A1", "input": "keep"})).unwrap();
+        s.execute("home.bold", json!({"range": "B2"})).unwrap();
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!((r["usedCells"].as_u64(), r["optimizableCells"].as_u64()), (Some(2), Some(1)));
+        assert_eq!(r["sheets"][0]["usedCells"], 2);
+        assert_eq!(r["sheets"][0]["optimizableCells"], 1);
+        let cell = &r["cells"][0];
+        assert_eq!((cell["sheet"].as_str(), cell["cell"].as_str(), cell["optimize"].as_str()), (Some("Sheet1"), Some("B2"), Some("clearFormatting")));
+        assert!(cell["style"].as_u64().unwrap() > 0);
+        assert_eq!(cell["goto"], "'Sheet1'!B2");
+    }
+
+    #[test]
+    fn check_performance_ignores_notes_comments_and_normal_formulas() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("review.newNote", json!({"cell": "A1", "text": "note"})).unwrap();
+        s.execute("review.newComment", json!({"cell": "B2", "text": "comment"})).unwrap();
+        s.execute("cell.set", json!({"cell": "C1", "input": "=NOW()"})).unwrap();
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!((r["usedCells"].as_u64(), r["optimizableCells"].as_u64()), (Some(1), Some(0)));
+        assert_eq!(r["cells"], json!([]));
+        assert_eq!(r["truncated"], false);
+    }
+
+    #[test]
+    fn check_performance_caps_details_but_counts_every_optimizable_cell() {
+        let mut s = Session::new();
+        s.new_workbook();
+        for cell in ["A1", "A2", "A3"] {
+            s.execute("home.bold", json!({"range": cell, "on": true})).unwrap();
+        }
+        let r = s.execute("review.checkPerformance", json!({"limit": 2})).unwrap();
+        assert_eq!((r["usedCells"].as_u64(), r["optimizableCells"].as_u64()), (Some(3), Some(3)));
+        assert_eq!((r["shown"].as_u64(), r["truncated"].as_bool(), r["limit"].as_u64()), (Some(2), Some(true), Some(2)));
+        assert_eq!(r["cells"].as_array().unwrap().len(), 2);
+        // A hostile or huge limit is clamped rather than trusted.
+        assert_eq!(s.execute("review.checkPerformance", json!({"limit": 9_999_999})).unwrap()["limit"], PERFORMANCE_MAX_LIMIT);
+        assert_eq!(s.execute("review.checkPerformance", json!({"limit": 0})).unwrap()["limit"], 1);
+    }
+
+    #[test]
+    fn check_performance_optimize_sheet_clears_only_that_sheet_and_reports_counts() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("home.insertSheet", json!({"name": "Two"})).unwrap();
+        for (sheet, cell) in [(0, "A1"), (1, "B2")] {
+            s.execute("home.bold", json!({"sheet": sheet, "range": cell, "on": true})).unwrap();
+        }
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!((r["usedCells"].as_u64(), r["optimizableCells"].as_u64()), (Some(2), Some(2)));
+        assert_eq!((r["sheets"][0]["optimizableCells"].as_u64(), r["sheets"][1]["optimizableCells"].as_u64()), (Some(1), Some(1)));
+        let optimized = s.execute("review.optimizePerformance", json!({"sheet": 1})).unwrap();
+        assert_eq!((optimized["optimized"].as_u64(), optimized["truncated"].as_bool()), (Some(1), Some(false)));
+        assert_eq!(optimized["sheets"], json!([{"name": "Two", "index": 1, "optimized": 1}]));
+        assert_eq!(optimized["skippedProtected"], json!([]));
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!((r["sheets"][0]["optimizableCells"].as_u64(), r["sheets"][1]["optimizableCells"].as_u64()), (Some(1), Some(0)));
+        let all = s.execute("review.optimizePerformance", json!({})).unwrap();
+        assert_eq!(all["optimized"], 1);
+        assert_eq!(all["sheets"], json!([{"name": "Sheet1", "index": 0, "optimized": 1}, {"name": "Two", "index": 1, "optimized": 0}]));
+        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 0);
+    }
+
+    #[test]
+    fn check_performance_optimize_is_undoable_and_keeps_values() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("home.bold", json!({"range": "A1"})).unwrap();
+        s.execute("range.setValues", json!({"range": "B1", "values": [["keep"]]})).unwrap();
+        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
+        s.execute("review.optimizePerformance", json!({})).unwrap();
+        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 0);
+        assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("B1").unwrap()).display(), "keep");
+        s.execute("edit.undo", json!({})).unwrap();
+        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
+    }
+
+    #[test]
+    fn check_performance_counts_but_optimize_skips_a_protected_sheet() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("home.bold", json!({"range": "A1"})).unwrap();
+        s.execute("review.protectSheet", json!({})).unwrap();
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!(r["optimizableCells"], 1);
+        assert_eq!(r["sheets"][0]["protected"], true);
+        let optimized = s.execute("review.optimizePerformance", json!({"sheet": "Sheet1"})).unwrap();
+        assert_eq!((optimized["optimized"].as_u64(), optimized["skippedProtected"].clone()), (Some(0), json!(["Sheet1"])));
+        assert_eq!(optimized["sheets"], json!([]));
+        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
+        s.execute("review.unprotectSheet", json!({})).unwrap();
+        assert_eq!(s.execute("review.optimizePerformance", json!({})).unwrap()["optimized"], 1);
+    }
+
+    #[test]
+    fn audit_calculation_is_opt_in_and_does_not_change_check_performance() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("cell.set", json!({"cell": "A1", "input": "=NOW()+SUM(C:C)"})).unwrap();
+        let default = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!((default["optimizableCells"].as_u64(), default["truncated"].as_bool()), (Some(0), Some(false)));
+        assert!(default.get("issues").is_none());
+        let audit = s.execute("review.auditCalculation", json!({})).unwrap();
+        assert_eq!((audit["total"].as_u64(), audit["categories"].as_array().unwrap().len()), (Some(2), AUDIT_CATEGORY_COUNT));
+        assert_eq!(category_count(&audit, "volatileFormula"), 1);
+        assert_eq!(category_count(&audit, "fullColumnReference"), 1);
+    }
+
+    #[test]
+    fn audit_calculation_flags_volatile_functions_and_leaves_ordinary_formulas_alone() {
         let mut s = Session::new();
         s.new_workbook();
         for (cell, formula) in [
@@ -874,7 +1041,7 @@ mod tests {
         ] {
             s.execute("cell.set", json!({"cell": cell, "input": formula})).unwrap();
         }
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        let r = s.execute("review.auditCalculation", json!({})).unwrap();
         assert_eq!(r["total"], 4);
         assert_eq!(category_count(&r, "volatileFormula"), 4);
         assert_eq!(cells_with_category(&r, "volatileFormula"), ["A1", "A2", "A6", "A7"].map(String::from).to_vec());
@@ -888,13 +1055,13 @@ mod tests {
     }
 
     #[test]
-    fn check_performance_distinguishes_full_column_and_row_references_from_bounded_ranges() {
+    fn audit_calculation_distinguishes_full_column_and_row_references_from_bounded_ranges() {
         let mut s = Session::new();
         s.new_workbook();
         for (cell, formula) in [("A1", "=SUM(C:C)"), ("A2", "=SUM(1:1)"), ("A3", "=SUM(C1:C10)"), ("A4", "=SUM(A1:Z10)")] {
             s.execute("cell.set", json!({"cell": cell, "input": formula})).unwrap();
         }
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        let r = s.execute("review.auditCalculation", json!({})).unwrap();
         assert_eq!(r["total"], 2);
         assert_eq!(category_count(&r, "fullColumnReference"), 1);
         assert_eq!(category_count(&r, "fullRowReference"), 1);
@@ -907,13 +1074,13 @@ mod tests {
     }
 
     #[test]
-    fn check_performance_flags_whole_table_and_oversized_ranges() {
+    fn audit_calculation_flags_whole_table_and_oversized_ranges() {
         let mut s = Session::new();
         s.new_workbook();
         s.execute("insert.table", json!({"range": "A1:B3", "name": "Data"})).unwrap();
         s.execute("cell.set", json!({"cell": "E1", "input": "=SUM(Data[#All])"})).unwrap();
         s.execute("cell.set", json!({"cell": "A200", "input": "=SUM(A1:XFC62)"})).unwrap();
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        let r = s.execute("review.auditCalculation", json!({})).unwrap();
         assert_eq!(category_count(&r, "wholeTableReference"), 1);
         assert_eq!(category_count(&r, "oversizedRange"), 1);
         let table = r["issues"].as_array().unwrap().iter().find(|i| i["category"] == "wholeTableReference").unwrap();
@@ -925,67 +1092,20 @@ mod tests {
     }
 
     #[test]
-    fn check_performance_ignores_notes_and_comments() {
-        let mut s = Session::new();
-        s.new_workbook();
-        s.execute("review.newNote", json!({"cell": "A1", "text": "note"})).unwrap();
-        s.execute("review.newComment", json!({"cell": "B2", "text": "comment"})).unwrap();
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
-        assert_eq!(r["total"], 0);
-        assert_eq!(r["issues"], json!([]));
-    }
-
-    #[test]
-    fn check_performance_caps_returned_issues_but_still_counts_them() {
+    fn audit_calculation_caps_returned_issues_but_still_counts_them() {
         let mut s = Session::new();
         s.new_workbook();
         for cell in ["A1", "A2", "A3"] {
             s.execute("cell.set", json!({"cell": cell, "input": "=NOW()"})).unwrap();
         }
-        let r = s.execute("review.checkPerformance", json!({"limit": 2})).unwrap();
+        let r = s.execute("review.auditCalculation", json!({"limit": 2})).unwrap();
         assert_eq!((r["total"].as_u64(), r["shown"].as_u64(), r["truncated"].as_bool()), (Some(3), Some(2), Some(true)));
         assert_eq!(r["issues"].as_array().unwrap().len(), 2);
         assert_eq!(category_count(&r, "volatileFormula"), 3);
         assert_eq!(r["limit"], 2);
         // A hostile or huge limit is clamped rather than trusted.
-        assert_eq!(s.execute("review.checkPerformance", json!({"limit": 9_999_999})).unwrap()["limit"], PERFORMANCE_MAX_LIMIT);
-        assert_eq!(s.execute("review.checkPerformance", json!({"limit": 0})).unwrap()["limit"], 1);
-    }
-
-    #[test]
-    fn check_performance_reports_unused_formatting_and_optimize_clears_it_safely() {
-        let mut s = Session::new();
-        s.new_workbook();
-        s.execute("home.bold", json!({"range": "A1"})).unwrap();
-        s.execute("range.setValues", json!({"range": "B1", "values": [["keep"]]})).unwrap();
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
-        assert_eq!(category_count(&r, "unusedFormatting"), 1);
-        let issue = r["issues"].as_array().unwrap().iter().find(|i| i["category"] == "unusedFormatting").unwrap();
-        assert_eq!((issue["cell"].as_str(), issue["optimize"].as_str()), (Some("A1"), Some("clearFormatting")));
-        assert_eq!(issue["formula"], Json::Null);
-        // Values are untouched and clearing the blank cell's style is undoable.
-        let optimized = s.execute("review.optimizePerformance", json!({})).unwrap();
-        assert_eq!((optimized["optimized"].as_u64(), optimized["truncated"].as_bool()), (Some(1), Some(false)));
-        assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["total"], 0);
-        assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("B1").unwrap()).display(), "keep");
-        s.execute("edit.undo", json!({})).unwrap();
-        assert_eq!(category_count(&s.execute("review.checkPerformance", json!({})).unwrap(), "unusedFormatting"), 1);
-    }
-
-    #[test]
-    fn check_performance_still_scans_and_optimize_skips_a_protected_sheet() {
-        let mut s = Session::new();
-        s.new_workbook();
-        s.execute("home.bold", json!({"range": "A1"})).unwrap();
-        s.execute("review.protectSheet", json!({})).unwrap();
-        let r = s.execute("review.checkPerformance", json!({})).unwrap();
-        assert_eq!(category_count(&r, "unusedFormatting"), 1);
-        assert_eq!(r["sheets"][0]["protected"], true);
-        let optimized = s.execute("review.optimizePerformance", json!({"sheet": "Sheet1"})).unwrap();
-        assert_eq!((optimized["optimized"].as_u64(), optimized["skippedProtected"].clone()), (Some(0), json!(["Sheet1"])));
-        assert_eq!(category_count(&s.execute("review.checkPerformance", json!({})).unwrap(), "unusedFormatting"), 1);
-        s.execute("review.unprotectSheet", json!({})).unwrap();
-        assert_eq!(s.execute("review.optimizePerformance", json!({})).unwrap()["optimized"], 1);
+        assert_eq!(s.execute("review.auditCalculation", json!({"limit": 9_999_999})).unwrap()["limit"], PERFORMANCE_MAX_LIMIT);
+        assert_eq!(s.execute("review.auditCalculation", json!({"limit": 0})).unwrap()["limit"], 1);
     }
 }
 

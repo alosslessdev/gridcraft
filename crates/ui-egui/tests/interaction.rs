@@ -608,9 +608,9 @@ fn select_data_dialog_sets_the_category_axis_labels() {
 }
 
 #[test]
-fn check_performance_dialog_reports_issues_and_goes_to_the_cell() {
+fn check_performance_dialog_reports_optimizable_cells_and_goes_to_one() {
     let mut s = blank();
-    s.execute("cell.set", json!({"cell": "B2", "input": "=NOW()"})).unwrap();
+    s.execute("home.bold", json!({"range": "B2"})).unwrap();
     let mut h = harness(s);
     h.state_mut().ui.ribbon_tab = "Review".into();
     h.run_steps(2);
@@ -618,8 +618,10 @@ fn check_performance_dialog_reports_issues_and_goes_to_the_cell() {
     h.run_steps(2);
     let d = h.state().dialog.as_ref().expect("the Workbook Performance pane opens");
     assert_eq!(d.title, "Workbook Performance");
-    assert_eq!(d.result.as_ref().unwrap()["total"], 1);
-    assert_eq!(d.result.as_ref().unwrap()["issues"][0]["cell"], "B2");
+    let report = d.result.as_ref().unwrap();
+    assert_eq!((report["usedCells"].as_u64(), report["optimizableCells"].as_u64()), (Some(1), Some(1)));
+    assert_eq!(report["cells"][0]["cell"], "B2");
+    assert!(h.query_by_label("1 cells used · 1 can be optimized").is_some());
     h.get_by_label("Go To").click();
     h.run_steps(2);
     assert_eq!(h.state().session.active().unwrap().selection.active, CellRef::new(1, 1));
@@ -631,6 +633,7 @@ fn check_performance_dialog_says_when_there_is_nothing_to_fix() {
     let mut h = harness(blank());
     h.state_mut().open_dialog("checkPerformance", json!({}));
     h.run_steps(2);
+    assert!(h.query_by_label("0 cells used · 0 can be optimized").is_some());
     assert!(h.query_by_label("No performance issues found.").is_some());
 }
 
@@ -641,10 +644,29 @@ fn check_performance_optimize_all_clears_unused_formatting_and_refreshes() {
     let mut h = harness(s);
     h.state_mut().open_dialog("checkPerformance", json!({}));
     h.run_steps(2);
-    assert!(h.query_by_label("Unused formatting: 1").is_some());
+    assert!(h.query_by_label("1 cells used · 1 can be optimized").is_some());
+    assert!(h.query_by_label("Optimize sheet").is_some());
     h.get_by_label("Optimize all").click();
     h.run_steps(3);
     assert!(h.query_by_label("No performance issues found.").is_some());
+}
+
+#[test]
+fn check_performance_optimize_sheet_clears_only_that_sheet() {
+    let mut s = blank();
+    s.execute("home.insertSheet", json!({"name": "Two"})).unwrap();
+    for (sheet, cell) in [(0, "A1"), (1, "B2")] {
+        s.execute("home.bold", json!({"sheet": sheet, "range": cell, "on": true})).unwrap();
+    }
+    let mut h = harness(s);
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    assert_eq!(h.query_all_by_label("Optimize sheet").count(), 2);
+    h.get_all_by_label("Optimize sheet").next().expect("a sheet row").click();
+    h.run_steps(3);
+    let report = h.state().dialog.as_ref().unwrap().result.clone().unwrap();
+    assert_eq!(report["optimizableCells"], 1);
+    assert_eq!((report["sheets"][0]["optimizableCells"].as_u64(), report["sheets"][1]["optimizableCells"].as_u64()), (Some(0), Some(1)));
 }
 
 #[test]
