@@ -131,7 +131,7 @@ column_ref   := "[" name "]" | table "[" name "]"
 Statement keywords are matched case-insensitively. There are no statement terminators in the
 documented grammar: `MEASURE`, `COLUMN`, `TABLE`, `VAR`, `FUNCTION`, `MPARAMETER` and the
 `EVALUATE` token bound definition bodies and separate statements, so no newline is needed.
-A single trailing `;` is accepted as a recovery extension. The `DEFINE` block is optional but
+One or more trailing `;` are accepted as a recovery extension. The `DEFINE` block is optional but
 requires at least one entry and must be followed by at least one `EVALUATE`. Duplicate definition
 names and forward/backward references are accepted; resolution is a semantic concern.
 
@@ -365,10 +365,9 @@ Variadic overloads repeat their last parameter kind for every additional argumen
   engine-specific, and the crate records them without validating a model.
 - `Call`, `NameRef` and `NameStyle` keep spelling/quoting so catalog and type work can resolve
   names without re-lexing.
-- `types::infer_type` deliberately knows only `TRUE()`, `FALSE()` and `BLANK()`, plus the
-  operators and literals. The function PR supplies signatures for everything else;
-  `InferredType::Unknown` marks those calls today, and a `VAR`/`RETURN` block is typed by its
-  `RETURN` expression.
+- `types::infer_type` uses catalog return types for known functions. Name references and
+  `Any`-typed or unknown calls are `InferredType::Unknown` until a binder supplies model
+  information; a `VAR`/`RETURN` block is typed by its `RETURN` expression.
 
 ## Example
 
