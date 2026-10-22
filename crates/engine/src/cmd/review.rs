@@ -698,7 +698,7 @@ fn optimize_performance(s: &mut Session, p: &Json) -> Result<Json> {
     edit(s, |cx| {
         for (si, cells) in plan {
             for at in cells {
-                cx.sheet_mut(si)?.set_style(at, StyleId::DEFAULT);
+                cx.sheet_mut(si)?.remove_cell(at);
                 cx.touch(si, at);
             }
         }
@@ -987,10 +987,16 @@ mod tests {
         let mut s = Session::new();
         s.new_workbook();
         s.execute("home.bold", json!({"range": "A1"})).unwrap();
+        s.execute("review.newComment", json!({"cell": "A1", "text": "keep me"})).unwrap();
         s.execute("range.setValues", json!({"range": "B1", "values": [["keep"]]})).unwrap();
         assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
         s.execute("review.optimizePerformance", json!({})).unwrap();
         assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 0);
+        {
+            let sh = s.doc().unwrap().wb.active().unwrap();
+            assert!(sh.cell(CellRef::parse("A1").unwrap()).is_none(), "the blank formatted cell is gone");
+            assert!(sh.comments.contains_key(&CellRef::parse("A1").unwrap()), "the comment stays");
+        }
         assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("B1").unwrap()).display(), "keep");
         s.execute("edit.undo", json!({})).unwrap();
         assert_eq!(s.execute("review.checkPerformance", json!({})).unwrap()["optimizableCells"], 1);
