@@ -236,6 +236,9 @@ impl<'a> Binder<'a> {
         for (index, arg) in call.args.iter().enumerate() {
             let keyword = match spec.name {
                 "DATEDIFF" if index == 2 => keyword_name(arg),
+                // CONVERT's second parameter is a bare type keyword (INTEGER, DATETIME, ...),
+                // not a name reference: `CONVERT ( 12345, DATETIME )`.
+                "CONVERT" if index == 1 => keyword_name(arg),
                 "DATATABLE" if index % 2 == 1 => keyword_name(arg),
                 _ => None,
             };
