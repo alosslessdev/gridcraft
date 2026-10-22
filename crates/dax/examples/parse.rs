@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Canonical: {}", print_query(&query));
         }
         Err(query_error) => {
-            if starts_with_evaluate(text) {
+            if starts_with_query_keyword(text) {
                 return Err(query_error.into());
             }
             let expr = parse_expression(text)?;
@@ -38,6 +38,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn starts_with_evaluate(text: &str) -> bool {
-    tokenize(text).is_ok_and(|tokens| matches!(tokens.first().map(|token| &token.kind), Some(TokenKind::Evaluate)))
+fn starts_with_query_keyword(text: &str) -> bool {
+    tokenize(text).is_ok_and(|tokens| match tokens.first().map(|token| &token.kind) {
+        Some(TokenKind::Evaluate) => true,
+        Some(TokenKind::Ident(word)) => word.eq_ignore_ascii_case("DEFINE"),
+        _ => false,
+    })
 }
