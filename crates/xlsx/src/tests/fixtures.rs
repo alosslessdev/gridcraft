@@ -695,10 +695,13 @@ fn custom_widths_equal_to_the_default_round_trip() {
     let cols: Vec<_> =
         sheet.child("cols").unwrap().kids("col").map(|c| (c.attr_u32("min"), c.attr_u32("max"), c.flag("customWidth", false))).collect();
     assert_eq!(cols, [(Some(4), Some(7), true)]);
-/// The four `<gradientFill>` elements are copied verbatim from `xl/styles.xml` written by Excel
-/// 16.0 after setting `Interior.Gradient.Degree` to 0, 45, 90 and 135. Excel omits `degree` for 0.
+}
+
+/// The four `<gradientFill>` elements are hand-written from ECMA-376 Part 1 §18.8.24
+/// (CT_GradientFill): `degree` is the gradient's direction and defaults to 0, so it is omitted
+/// for the top-to-bottom gradient. No file produced by Excel is committed here.
 #[test]
-fn excel_written_gradient_degrees_are_screen_angles() {
+fn gradient_degrees_are_screen_angles() {
     let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
       <fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
         <fill><gradientFill><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
@@ -735,28 +738,47 @@ fn excel_written_gradient_degrees_are_screen_angles() {
     assert_eq!(g135.position(0.0, 1.0), 1.0);
 }
 
-/// Excel writes a default path gradient as `<gradientFill type="path">` with no convergence
-/// attributes and renders it from the corner; theme stops keep full-precision tints.
+/// Hand-written from ECMA-376 Part 1 §18.8.24: `type="path"` without convergence attributes
+/// defaults every edge to 0 (the gradient starts at the corner), and `left`/`right`/`top`/
+/// `bottom` move the focus. Theme stops keep their theme index and tint, rounded to thousandths.
 #[test]
-fn excel_written_path_and_theme_gradients_match_their_rendering() {
+fn path_and_theme_gradients_match_their_rendering() {
     let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-      <fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+      <fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
         <fill><gradientFill type="path"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
-        <fill><gradientFill><stop position="0"><color theme="4" tint="0.39997558519241921"/></stop><stop position="1"><color theme="5" tint="-0.249977111117893"/></stop></gradientFill></fill>
+        <fill><gradientFill type="path" left="0.5" right="0.5" top="0.5" bottom="0.5"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="1"><color rgb="FFFFFF00"/></stop></gradientFill></fill>
+        <fill><gradientFill degree="45"><stop position="0"><color rgb="FFFF0000"/></stop><stop position="0.5"><color rgb="FF00FF00"/></stop><stop position="1"><color rgb="FF0000FF"/></stop></gradientFill></fill>
+        <fill><gradientFill><stop position="0"><color theme="4" tint="0.4"/></stop><stop position="1"><color theme="5" tint="-0.25"/></stop></gradientFill></fill>
       </fills>
-      <cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/></cellXfs>
+      <cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="5" borderId="0" xfId="0" applyFill="1"/></cellXfs>
     </styleSheet>"#;
     let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
-    let body = r#"<sheetData><row r="1"><c r="A1" s="1"/><c r="B1" s="2"/></row></sheetData>"#;
+    let body = r#"<sheetData><row r="1"><c r="A1" s="1"/><c r="B1" s="2"/><c r="C1" s="3"/><c r="D1" s="4"/></row></sheetData>"#;
     let (wb, _) = read_xlsx(&minimal(body, &[("xl/styles.xml", styles)], rels, "")).unwrap();
     let sh = wb.sheet(0).unwrap();
+    let gradient = |a: &str| wb.styles.get(sh.style_id(at(a))).fill.gradient.clone().unwrap_or_else(|| panic!("{a}: no gradient"));
 
-    let path = wb.styles.get(sh.style_id(at("A1"))).fill.gradient.clone().expect("path gradient");
+    let path = gradient("A1");
     assert_eq!(path.kind, GradientKind::Path { left: 0.0, right: 0.0, top: 0.0, bottom: 0.0 });
     assert_eq!(path.position(0.0, 0.0), 0.0);
     assert_eq!(path.position(1.0, 1.0), 1.0);
 
-    let theme = wb.styles.get(sh.style_id(at("B1"))).fill.gradient.clone().expect("theme gradient");
+    let centered = gradient("B1");
+    assert_eq!(centered.kind, GradientKind::Path { left: 0.5, right: 0.5, top: 0.5, bottom: 0.5 });
+    assert_eq!(centered.position(0.5, 0.5), 0.0);
+
+    let three_stops = gradient("C1");
+    assert_eq!(three_stops.kind, GradientKind::Linear { degree: 45.0 });
+    assert_eq!(
+        three_stops.stops,
+        vec![
+            GradientStop { position: 0.0, color: Color::Rgb(0xFF0000) },
+            GradientStop { position: 0.5, color: Color::Rgb(0x00FF00) },
+            GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) },
+        ]
+    );
+
+    let theme = gradient("D1");
     assert_eq!(theme.stops[0].color, Color::Theme(4, 400));
     assert_eq!(theme.stops[1].color, Color::Theme(5, -250));
 }
