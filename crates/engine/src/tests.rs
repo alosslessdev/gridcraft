@@ -1769,6 +1769,28 @@ fn table_filter_button_off_keeps_the_criteria_and_hidden_rows() {
 }
 
 #[test]
+fn table_filter_button_off_round_trips_with_criteria_and_hidden_rows() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:A3", "header": true, "name": "T"})).unwrap();
+    s.execute("data.filterBy", json!({"column": "A", "values": ["a"]})).unwrap();
+    s.execute("table.filterButton", json!({"table": "T", "on": false})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().is_row_hidden(2));
+
+    // The table part keeps `<autoFilter>` with the criteria and marks every column
+    // `hiddenButton="1"` (the standard per-column way to hide the dropdowns), so the file reopens
+    // with the filter still applied, its row hidden, and Filter Button still off.
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "t.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    let t = &sh.tables[0];
+    assert!(!t.filter_button, "the button stays off");
+    assert_eq!(t.filter.len(), 1, "the criteria survive");
+    assert!(sh.is_row_hidden(2), "the filtered row stays hidden");
+}
+
+#[test]
 fn table_filter_off_reveals_only_filter_hidden_rows() {
     let mut s = s();
     s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"], ["c"]]})).unwrap();
