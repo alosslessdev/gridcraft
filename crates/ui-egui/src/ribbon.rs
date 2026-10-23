@@ -2381,7 +2381,7 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("accessibility", json!({}));
     }
     let __k = big_button(ui, Icon::Trace, "Check\nPerformance", "Check Performance", false);
-    control_keytip(app, ui, &__k, "review.checkPerformance");
+    control_keytip(app, ui, &__k, "dialog:checkPerformance");
     if __k.clicked() {
         app.open_dialog("checkPerformance", json!({}));
     }
