@@ -1425,11 +1425,13 @@ fn pareto(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
     let ys = nice_scale(lo, hi, true);
     let pct = Fmt::new("0%");
     let value_fmt = if binned { Fmt::new("General") } else { Fmt::new(&s.number_format) };
-    let ys2 = nice_scale(0.0, 1.0, true);
+    // A cumulative percentage axis is fixed at 0–100%: Excel shows it that way, and the line
+    // below maps each cumulative share straight onto the plot height.
+    let ys2 = fixed_scale(0.0, 1.0, 0.2);
     let plot = frame(
         ctx,
         area,
-        CatAxis::Labels(&labels),
+        CatAxis::Labels(&labels, &[]),
         &ValAxis { scale: ys, fmt: &value_fmt },
         Some(&ValAxis { scale: ys2, fmt: &pct }),
         false,
