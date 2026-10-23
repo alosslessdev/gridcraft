@@ -487,9 +487,35 @@ fn circular_references(app: &SheetApp) -> Vec<(usize, String, String)> {
         .collect()
 }
 
+/// The part of a sequence still to type, or `None` when the badge is not armed.
+fn keytip_rest<'a>(app: &SheetApp, sequence: &'a str) -> Option<&'a str> {
+    app.keytips.prefix().and_then(|prefix| sequence.strip_prefix(prefix)).filter(|s| !s.is_empty())
+}
+
 /// Keytips are painted, not focusable widgets: the grid retains keyboard focus.
 fn keytip(app: &SheetApp, ui: &Ui, sequence: &str, at: egui::Pos2) {
-    let Some(rest) = app.keytips.prefix().and_then(|prefix| sequence.strip_prefix(prefix)).filter(|s| !s.is_empty()) else { return };
+    if let Some(rest) = keytip_rest(app, sequence) {
+        paint_keytip(ui, rest, at);
+    }
+}
+
+/// Paint several group badges side by side, centred on `at` but apart from each other, so
+/// alternatives (e.g. `NZ` and `NH`) stay readable.
+fn keytip_group(app: &SheetApp, ui: &Ui, sequences: &[&str], at: egui::Pos2) {
+    let t = Tokens::get(ui.ctx());
+    let font = theme::ui_bold(10.5);
+    let rest: Vec<&str> = sequences.iter().filter_map(|sequence| keytip_rest(app, sequence)).collect();
+    let widths: Vec<f32> = rest.iter().map(|r| ui.painter().layout_no_wrap((*r).into(), font.clone(), t.text).size().x + 7.0).collect();
+    let gap = 4.0;
+    let total: f32 = widths.iter().sum::<f32>() + gap * widths.len().saturating_sub(1) as f32;
+    let mut x = at.x - total / 2.0;
+    for (rest, width) in rest.iter().zip(&widths) {
+        paint_keytip(ui, rest, pos2(x + width / 2.0, at.y));
+        x += width + gap;
+    }
+}
+
+fn paint_keytip(ui: &Ui, rest: &str, at: egui::Pos2) {
     let t = Tokens::get(ui.ctx());
     let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("ribbon_keytips"))).with_clip_rect(ui.clip_rect());
     let text = painter.layout_no_wrap(rest.into(), theme::ui_bold(10.5), t.text);
@@ -1811,9 +1837,8 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     // Excel folds Text Box and Header & Footer into one Text split button: the body inserts a text
     // box, the arrow opens the drop-down.
     let (text_body, text_arrow, text_rect) = large_split_button(ui, Icon::TextBox, "Text", "Text Box", "Text options");
-    for sequence in keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["insert.textBox", "pageLayout.headerFooter"]) {
-        keytip(app, ui, sequence, text_rect.center_bottom());
-    }
+    let group = keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["insert.textBox", "pageLayout.headerFooter"]);
+    keytip_group(app, ui, &group, text_rect.center_bottom());
     if text_body {
         act(app, "insert.textBox", json!({}));
     }
