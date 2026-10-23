@@ -357,8 +357,17 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
             }
             ShapeKind::BlockArrow => {
                 let (w, h) = (r.width(), r.height());
-                p.add(PathShape {
-                    points: vec![
+                // egui only fills convex paths, and a block arrow is concave: fill the shaft and
+                // the head separately, then outline the arrow as one closed line.
+                let shaft = Rect::from_min_max(pos2(r.left(), r.center().y - h * 0.22), pos2(r.left() + w * 0.62, r.center().y + h * 0.22));
+                p.rect_filled(shaft, 0.0, fill);
+                p.add(PathShape::convex_polygon(
+                    vec![pos2(r.left() + w * 0.62, r.top()), pos2(r.right(), r.center().y), pos2(r.left() + w * 0.62, r.bottom())],
+                    fill,
+                    Stroke::NONE,
+                ));
+                p.add(PathShape::closed_line(
+                    vec![
                         pos2(r.left(), r.center().y - h * 0.22),
                         pos2(r.left() + w * 0.62, r.center().y - h * 0.22),
                         pos2(r.left() + w * 0.62, r.top()),
@@ -367,15 +376,35 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
                         pos2(r.left() + w * 0.62, r.center().y + h * 0.22),
                         pos2(r.left(), r.center().y + h * 0.22),
                     ],
-                    closed: true,
-                    fill,
-                    stroke: PathStroke::new(1.0, line),
-                });
+                    Stroke::new(1.0, line),
+                ));
             }
             ShapeKind::ArrowDouble => {
                 let (w, h) = (r.width(), r.height());
-                p.add(PathShape {
-                    points: vec![
+                // Likewise a double arrow is concave: a shaft rectangle and two head triangles.
+                let (left, right) = (r.left() + w * 0.22, r.right() - w * 0.22);
+                let (top, bottom) = (r.center().y - h * 0.11, r.center().y + h * 0.11);
+                p.rect_filled(Rect::from_min_max(pos2(left, top), pos2(right, bottom)), 0.0, fill);
+                p.add(PathShape::convex_polygon(
+                    vec![
+                        pos2(r.left(), r.center().y),
+                        pos2(r.left() + w * 0.22, r.top() + h * 0.18),
+                        pos2(r.left() + w * 0.22, r.bottom() - h * 0.18),
+                    ],
+                    fill,
+                    Stroke::NONE,
+                ));
+                p.add(PathShape::convex_polygon(
+                    vec![
+                        pos2(r.right(), r.center().y),
+                        pos2(r.right() - w * 0.22, r.top() + h * 0.18),
+                        pos2(r.right() - w * 0.22, r.bottom() - h * 0.18),
+                    ],
+                    fill,
+                    Stroke::NONE,
+                ));
+                p.add(PathShape::closed_line(
+                    vec![
                         pos2(r.left(), r.center().y),
                         pos2(r.left() + w * 0.22, r.top() + h * 0.18),
                         pos2(r.left() + w * 0.22, r.center().y - h * 0.11),
@@ -387,10 +416,8 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
                         pos2(r.left() + w * 0.22, r.center().y + h * 0.11),
                         pos2(r.left() + w * 0.22, r.bottom() - h * 0.18),
                     ],
-                    closed: true,
-                    fill,
-                    stroke: PathStroke::new(1.0, line),
-                });
+                    Stroke::new(1.0, line),
+                ));
             }
             ShapeKind::Ink => {
                 let w = gridcraft_engine::cmd::draw::ink_width(sp) * geo.z;
@@ -409,12 +436,20 @@ pub(crate) fn paint_objects(app: &SheetApp, p: &Painter, geo: &Geo, wb: &Workboo
                 label = false;
             }
             ShapeKind::Line | ShapeKind::Arrow => {
-                p.line_segment([r.left_top(), r.right_bottom()], Stroke::new(2.0, line));
+                // The preset runs from the box's top-left corner; flips mirror it inside the
+                // box, which is how a line or arrow turns around without a rotation.
+                let flip = |q: Pos2| {
+                    pos2(
+                        if sp.format.flip_h { r.left() + r.right() - q.x } else { q.x },
+                        if sp.format.flip_v { r.top() + r.bottom() - q.y } else { q.y },
+                    )
+                };
+                let (a, b) = (flip(r.left_top()), flip(r.right_bottom()));
+                p.line_segment([a, b], Stroke::new(2.0, line));
                 if sp.kind == ShapeKind::Arrow {
-                    let d = (r.right_bottom() - r.left_top()).normalized();
+                    let d = (b - a).normalized();
                     let n = vec2(-d.y, d.x);
-                    let tip = r.right_bottom();
-                    p.add(PathShape::convex_polygon(vec![tip, tip - d * 10.0 + n * 5.0, tip - d * 10.0 - n * 5.0], line, Stroke::NONE));
+                    p.add(PathShape::convex_polygon(vec![b, b - d * 10.0 + n * 5.0, b - d * 10.0 - n * 5.0], line, Stroke::NONE));
                 }
             }
         }

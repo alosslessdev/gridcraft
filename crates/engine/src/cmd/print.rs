@@ -1410,12 +1410,15 @@ fn draw_objects(pg: &mut Page, wb: &Workbook, si: usize, sh: &Sheet, b: &Block) 
             ),
             ShapeKind::Line | ShapeKind::Arrow => {
                 let c = line.map(|l| l.0).or(fill).unwrap_or([0, 0, 0]);
-                pg.stroke_line(x, y, x + w, y + h, (1.0 * b.k).max(0.3), c);
+                // Flips mirror the preset inside its box, so the arrow points the way it was drawn.
+                let (x0, y0) = (if shp.format.flip_h { x + w } else { x }, if shp.format.flip_v { y + h } else { y });
+                let (x1, y1) = (if shp.format.flip_h { x } else { x + w }, if shp.format.flip_v { y } else { y + h });
+                pg.stroke_line(x0, y0, x1, y1, (1.0 * b.k).max(0.3), c);
                 if shp.kind == ShapeKind::Arrow {
-                    let ang = h.atan2(w);
+                    let ang = (y1 - y0).atan2(x1 - x0);
                     let al = 8.0 * b.k;
-                    let p = |da: f32| [x + w - al * (ang + da).cos(), y + h - al * (ang + da).sin()];
-                    pg.polygon(&[[x + w, y + h], p(0.4), p(-0.4)], Some(c), None);
+                    let p = |da: f32| [x1 - al * (ang + da).cos(), y1 - al * (ang + da).sin()];
+                    pg.polygon(&[[x1, y1], p(0.4), p(-0.4)], Some(c), None);
                 }
             }
             _ => {

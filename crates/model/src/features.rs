@@ -604,7 +604,8 @@ pub struct Shape {
     pub fill: Color,
     pub line: Color,
     pub text: String,
-    /// Outline visibility and text formatting (DrawingML `a:ln`, `a:bodyPr`, `a:pPr`, `a:rPr`).
+    /// Outline visibility, mirroring and text formatting (DrawingML `a:xfrm flipH`/`flipV`,
+    /// `a:ln`, `a:bodyPr`, `a:pPr`, `a:rPr`).
     #[serde(default)]
     pub format: ShapeFormat,
 }
@@ -627,13 +628,18 @@ pub enum ShapeTextAnchor {
     Bottom,
 }
 
-/// How a shape's outline and text look. The text properties apply to the whole text (the first
-/// paragraph's and first run's properties when a file has several).
+/// How a shape's outline, mirroring and text look. The text properties apply to the whole text
+/// (the first paragraph's and first run's properties when a file has several).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShapeFormat {
     /// No outline (`a:ln/a:noFill`), whatever `Shape::line` says.
     pub no_line: bool,
+    /// Mirrored left to right inside its box (`a:xfrm flipH`). A line or arrow keeps its
+    /// direction this way: its geometry always runs from the box's top-left corner.
+    pub flip_h: bool,
+    /// Mirrored top to bottom inside its box (`a:xfrm flipV`).
+    pub flip_v: bool,
     /// Text size in points (`a:rPr sz` / 100); `None` is the default size.
     pub font_size: Option<f32>,
     pub bold: bool,
