@@ -658,6 +658,15 @@ pub struct ShapeFormat {
     pub rtl: bool,
 }
 
+impl ShapeFormat {
+    /// Mirrors `q`, a point in the box at (`x`, `y`) of size `w` × `h`, inside that box when the
+    /// shape is flipped (`a:xfrm flipH`/`flipV`). Preset geometry is drawn from its top-left, so
+    /// renderers mirror every vertex; text is not mirrored.
+    pub fn mirror_point(&self, x: f32, y: f32, w: f32, h: f32, q: [f32; 2]) -> [f32; 2] {
+        [if self.flip_h { 2.0 * x + w - q[0] } else { q[0] }, if self.flip_v { 2.0 * y + h - q[1] } else { q[1] }]
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SparklineKind {
     #[default]
