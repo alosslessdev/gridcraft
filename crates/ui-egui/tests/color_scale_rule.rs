@@ -247,3 +247,56 @@ fn an_unparseable_formula_is_refused_with_a_message() {
     assert!(message.contains("invalid") && message.contains("does not parse"), "{message}");
     assert!(h.state().session.active().unwrap().wb.active().unwrap().cond_formats.is_empty(), "no unopenable rule is stored");
 }
+
+#[test]
+fn switching_a_numeric_stop_to_formula_needs_a_formula() {
+    let mut h = harness();
+    h.state_mut().open_dialog("newFormattingRule", json!({}));
+    h.run_steps(6);
+
+    // Switching a Number stop to Formula without touching the field: the editor must store the
+    // field as a string rather than leave the old number in place, and OK must wait for one.
+    h.state_mut().dialog.as_mut().unwrap().values.insert(
+        "stops".into(),
+        json!([
+            {"type": "formula", "value": 7, "color": "#112233"},
+            {"type": "max", "color": "#778899"},
+        ]),
+    );
+    h.run_steps(2);
+    let stops_json = h.state().dialog.as_ref().unwrap().values["stops"].as_array().unwrap().clone();
+    assert_eq!(stops_json[0]["value"], json!(""), "a numeric value is not a formula");
+    h.get_by_label("   OK   ").click();
+    h.run_steps(6);
+    assert!(h.state().dialog.is_some(), "a formula stop with no formula does not confirm");
+    assert!(h.state().session.active().unwrap().wb.active().unwrap().cond_formats.is_empty());
+
+    // A blank formula is refused the same way.
+    h.state_mut().dialog.as_mut().unwrap().values.insert(
+        "stops".into(),
+        json!([
+            {"type": "formula", "value": "   ", "color": "#112233"},
+            {"type": "max", "color": "#778899"},
+        ]),
+    );
+    h.run_steps(2);
+    h.get_by_label("   OK   ").click();
+    h.run_steps(6);
+    assert!(h.state().dialog.is_some(), "a blank formula does not confirm");
+    assert!(h.state().session.active().unwrap().wb.active().unwrap().cond_formats.is_empty());
+
+    // A real formula confirms.
+    h.state_mut().dialog.as_mut().unwrap().values.insert("style".into(), json!("2color"));
+    h.state_mut().dialog.as_mut().unwrap().values.insert(
+        "stops".into(),
+        json!([
+            {"type": "formula", "value": "$Z$1", "color": "#112233"},
+            {"type": "max", "color": "#778899"},
+        ]),
+    );
+    h.run_steps(2);
+    h.get_by_label("   OK   ").click();
+    h.run_steps(6);
+    assert!(h.state().dialog.is_none());
+    assert_eq!(stops(&h), vec![(CfValueKind::Formula("$Z$1".into()), Color::Rgb(0x112233)), (CfValueKind::Max, Color::Rgb(0x778899))]);
+}
