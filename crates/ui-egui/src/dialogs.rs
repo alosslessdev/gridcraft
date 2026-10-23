@@ -2013,6 +2013,11 @@ fn colour_scale_editor(ui: &mut egui::Ui, d: &mut Dialog, lang: crate::i18n::Lan
                     {
                         obj.insert("value".into(), json!(n));
                     }
+                    // A numeric stop must carry a number: a stop switched from Lowest or
+                    // Highest value still holds `null`, which the engine refuses.
+                    if obj.get("value").and_then(Json::as_f64).is_none() {
+                        obj.insert("value".into(), json!(n));
+                    }
                 }
             }
             let c = parse_hex_color(obj.get("color").and_then(Json::as_str).unwrap_or("#FFFFFF"));
