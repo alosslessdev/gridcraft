@@ -53,6 +53,9 @@ fn arrow_opens_the_menu_and_both_items_work() {
     h.run_steps(6);
     let view = h.state().session.active().unwrap().wb.active().unwrap().view;
     assert_eq!(view, SheetViewMode::PageLayout, "Header & Footer starts editing the page header");
+    let edit = h.state().grid.hf_edit.as_ref().expect("header editing is active");
+    assert!(!edit.footer, "the centre header is edited, not the footer");
+    assert_eq!(edit.section, 1, "the centre section is edited");
 }
 
 fn key_event(key: Key, pressed: bool) -> Event {
@@ -80,5 +83,6 @@ fn nh1_starts_editing_the_page_header() {
     h.run_steps(6);
     let view = h.state().session.active().unwrap().wb.active().unwrap().view;
     assert_eq!(view, SheetViewMode::PageLayout, "NH1 starts editing the page header");
+    assert!(h.state().grid.hf_edit.is_some(), "NH1 begins an in-place header edit");
     assert!(h.state().dialog.is_none(), "NH1 no longer opens the Page Setup dialog");
 }
