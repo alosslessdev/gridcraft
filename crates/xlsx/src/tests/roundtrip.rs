@@ -1365,6 +1365,27 @@ fn gradient_fill_roundtrips_type_stops_and_colors() {
     assert_eq!(back.styles.get(sh.style_id(at("A2"))), wb.styles.get(path));
 }
 
+/// A file may hold a `<gradientFill>` with a single stop; it must not gain a synthetic second
+/// stop on read or save.
+#[test]
+fn one_stop_gradient_round_trips() {
+    let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+      <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+        <fill><gradientFill degree="90"><stop position="0.25"><color rgb="FF112233"/></stop></gradientFill></fill>
+      </fills>
+      <cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/></cellXfs>
+    </styleSheet>"#;
+    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
+    let body = r#"<sheetData><row r="1"><c r="A1" s="1"/></row></sheetData>"#;
+    let (wb, _) = read_xlsx(&super::minimal(body, &[("xl/styles.xml", styles)], rels, "")).unwrap();
+    let one = vec![GradientStop { position: 0.25, color: Color::Rgb(0x112233) }];
+    let read = wb.styles.get(wb.sheet(0).unwrap().style_id(at("A1"))).fill.gradient.clone().expect("gradient");
+    assert_eq!(read.stops, one);
+    let (back, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    let saved = back.styles.get(back.sheet(0).unwrap().style_id(at("A1"))).fill.gradient.clone().expect("gradient after save");
+    assert_eq!(saved.stops, one);
+}
+
 /// Excel's own solid fill is `<patternFill patternType="solid"><fgColor .../><bgColor indexed="64"/></patternFill>`.
 /// A partial `home.formatCells` fill must produce the same bytes, not a missing/odd background.
 #[test]
