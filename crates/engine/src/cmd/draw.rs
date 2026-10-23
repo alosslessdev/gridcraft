@@ -279,10 +279,11 @@ fn right_triangle_flips(p: &[[f32; 2]]) -> Option<(bool, bool)> {
     let x1 = p.iter().map(|q| q[0]).fold(f32::NEG_INFINITY, f32::max);
     let y0 = p.iter().map(|q| q[1]).fold(f32::INFINITY, f32::min);
     let y1 = p.iter().map(|q| q[1]).fold(f32::NEG_INFINITY, f32::max);
-    // Preset corners only: a leg along each box edge. Hand wobble is tolerated, a rotated leg
-    // (the right angle at an edge or inside) is not.
+    // Preset corners only: a leg along each box edge. Hand wobble is tolerated up to a share of
+    // the shorter side (a long thin box must not accept a corner halfway along its short side);
+    // a rotated leg (the right angle at an edge or inside) is not.
     let corner = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].into_iter().map(|c| dist(*v, c)).fold(f32::INFINITY, f32::min);
-    if corner > 0.15 * (x1 - x0).max(y1 - y0).max(1.0) {
+    if corner > 0.15 * (x1 - x0).min(y1 - y0).max(1.0) {
         return None;
     }
     Some((v[0] > (x0 + x1) / 2.0, v[1] < (y0 + y1) / 2.0))
