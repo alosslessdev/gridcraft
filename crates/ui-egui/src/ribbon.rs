@@ -1707,8 +1707,15 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     // Excel folds Text Box and Header & Footer into one Text split button: the body inserts a text
     // box, the arrow opens the drop-down.
     let (text_body, text_arrow, text_rect) = large_split_button(ui, Icon::TextBox, "Text", "Text Box", "Text options");
-    let group = keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["insert.textBox", "pageLayout.headerFooter"]);
-    keytip_group(app, ui, &group, text_rect.center_bottom());
+    let prefix = app.keytips.prefix().unwrap_or_default();
+    let mut badges = keytip_table::group_extension(prefix, &["insert.textBox", "pageLayout.headerFooter"]);
+    // One key deeper, the control's own badge (e.g. NZ -> T, NH -> 1) sits beside the group badges.
+    if let Some(final_badge) =
+        keytip_table::control_badge(prefix, "insert.textBox").or_else(|| keytip_table::item_letter(prefix, "pageLayout.headerFooter"))
+    {
+        badges.push(final_badge);
+    }
+    keytip_group(app, ui, &badges, text_rect.center_bottom());
     if text_body {
         act(app, "insert.textBox", json!({}));
     }
