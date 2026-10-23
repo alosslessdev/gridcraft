@@ -207,6 +207,12 @@ fn the_insert_tab_has_one_checkbox_button() {
     let mut h = harness();
     tab(&mut h, "Insert");
     assert_eq!(h.query_all_by_label("Checkbox").count(), 1, "one Checkbox button, not two");
+    // The button carries its own keytip badge (painted), so the table must resolve one for it.
+    assert_eq!(
+        gridcraft_ui_egui::keytips::keytip_table::control_badge("N", "insert.checkbox"),
+        Some("NCB"),
+        "the Checkbox button shows the badge for its direct command"
+    );
     click(&mut h, "Checkbox");
     assert!(h.state().message.is_none(), "{:?}", h.state().message);
 }
