@@ -4,7 +4,7 @@
 
 Interaction, controls and feel, against Excel. Part of [target-app-parity.md](target-app-parity.md).
 **UI/UX fidelity: ~55% ready, 50–80 h** (estimated). Ribbon command coverage is measured
-separately in [parity-checklist.md](parity-checklist.md) (275 / 291).
+separately in [parity-checklist.md](parity-checklist.md) (276 / 292).
 
 Sources: `crates/ui-egui/src` (ribbon, grid, editor, formula bar, dialogs, panes),
 `crates/engine/src/cmd` (shortcuts in command specs), the owner's black-box notes
@@ -200,7 +200,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 | 2026-10-24 | minor | When the fill starts from a date, the right-drag fill menu and the Auto Fill Options button also offer Fill Days, Fill Weekdays (Saturday and Sunday skipped), Fill Months and Fill Years (`edit.autoFill` with `mode` set to `days`, `weekdays`, `months` or `years`). A lone date steps by one unit; two or more dates step by the difference between the first two in that unit, or one unit when they fall in the same one. Fill Months and Fill Years keep the day of the month, clamped to the month's last day. Every fill by months or years (these two, a drag of dates a month apart, and Series by Month or Year) keeps the time of day of a date with a time, which used to be dropped |
 | 2026-10-22 | minor | Show Outline Symbols (`view.showOutlineSymbols`, Ctrl+8): a sheet can hide the outline's level buttons and brackets while keeping its outline, as Excel saves with `showOutlineSymbols="0"` (read and written); the grid then gives the bands no room |
 | 2026-10-22 | minor | A number in a repeat-fill format (`*`, as in the Accounting format) that is too wide for its column shows #### like any other number, instead of the fill rebuilding the value so its leading digits were cut off (2,509.00 CHF drawn as "509.00 CHF") |
-| 2026-10-21 | minor | Catalog 274 → 275 / 290 → 291: Table Design Filter Button checkbox and Header Row toggle (#1655) |
+| 2026-10-21 | minor | Catalog 275 → 276 / 291 → 292: Table Design Filter Button checkbox and Header Row toggle (#1655) |
 | 2026-10-21 | minor | Background error checking, first part (#1994): a constant whose text would be a number if typed (signs, thousands, currency, percent, exponent, parenthesised negative) gets Excel's green corner triangle; the active cell then shows a warning button whose menu names the problem and offers Convert to Number for the selection (`formulas.convertToNumber`). Dates, times and fractions kept as text and formula results are not flagged, as in Excel |
 | 2026-10-21 | minor | Paste Special laid out as Excel's: Paste and Operation options each in two columns inside a frame, Skip blanks and Transpose side by side, Paste Link as a button that pastes references at once; labels translated (the generic form didn't translate them) and the window no longer runs past the screen |
 | 2026-10-21 | minor | Form dialogs (conditional-format quick rules, New Name, Remove Duplicates, Text to Columns and every other `Dialog::form`) fit their content: OK and Cancel sit in a row under the last field instead of a right-to-left layout that took the screen's whole height and left the buttons floating halfway down |
