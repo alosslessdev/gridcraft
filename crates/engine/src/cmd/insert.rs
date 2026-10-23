@@ -6,7 +6,7 @@ use gridcraft_formula::adjust::{Axis, Edit};
 use gridcraft_model::*;
 use serde_json::{Value as Json, json};
 
-use super::sheet::{rewrite, shift_cell_features};
+use super::sheet::{check_table_shift, rewrite, shift_cell_features};
 use super::*;
 use crate::selection::current_region;
 
@@ -423,8 +423,10 @@ fn table_flag(s: &mut Session, p: &Json, which: &str) -> Result<Json> {
 }
 
 /// Header Row, as Excel: turning it off drops the header row from the table (the range starts one
-/// row lower and the header cells are cleared), turns the filter off, and keeps the column names
-/// in the table definition. Turning it back on restores the row and writes those names into it.
+/// row lower and the header cells are cleared), removes the filter, and keeps the column names in
+/// the table definition. Turning it back on restores the row, writes those names into it and shows
+/// the filter buttons again; when the row above is taken (or the table starts in row 1) a row's
+/// worth of cells is inserted for the header instead of refusing.
 fn table_header(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
     let (si, ti) = find_table(s, p)?;
     edit(s, |cx| {
@@ -436,30 +438,55 @@ fn table_header(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
         let c0 = t.range.start.col;
         let c1 = t.range.end.col;
         if want {
-            let new_start =
-                t.range.start.row.checked_sub(1).ok_or_else(|| EngineError::Other("There's no room above the table for its header row.".into()))?;
-            let occupied = cx.wb.sheet(si).is_some_and(|sh| {
-                (c0..=c1).any(|c| sh.tables.iter().enumerate().any(|(i, o)| i != ti && o.range.contains(CellRef::new(new_start, c))))
-            });
-            if occupied {
-                return Err(EngineError::Other("A table can't overlap another table.".into()));
-            }
-            // Writing the stored names back must not replace data typed into the row while the
-            // header was off (Excel refuses rather than lose it).
-            let replaced = cx
-                .wb
-                .sheet(si)
-                .is_some_and(|sh| (c0..=c1).any(|c| sh.cell(CellRef::new(new_start, c)).is_some_and(|x| x.formula.is_some() || !x.value.is_empty())));
-            if replaced {
-                return Err(EngineError::Other("To prevent possible loss of data, the header row can't replace existing cells.".into()));
-            }
+            let start = t.range.start.row;
             let names: Vec<String> = t.columns.iter().map(|c| c.name.clone()).collect();
-            let Some(t) = cx.wb.sheet_mut(si).and_then(|sh| sh.tables.get_mut(ti)) else { return Ok(Json::Null) };
-            t.range.start.row = new_start;
-            t.header_row = true;
-            let Some(sh) = cx.wb.sheet_mut(si) else { return Ok(Json::Null) };
-            for (i, name) in names.iter().enumerate() {
-                sh.set_value(CellRef::new(new_start, c0 + i as u32), gridcraft_core::Value::text(name.as_str()));
+            // The row above can take the header when it exists, holds nothing in the table's
+            // columns and doesn't belong to another table.
+            let free_above = start.checked_sub(1).is_some_and(|row| {
+                cx.wb.sheet(si).is_some_and(|sh| {
+                    (c0..=c1).all(|c| {
+                        !sh.tables.iter().enumerate().any(|(i, o)| i != ti && o.range.contains(CellRef::new(row, c)))
+                            && sh.cell(CellRef::new(row, c)).is_none_or(|x| x.formula.is_none() && x.value.is_empty())
+                    })
+                })
+            });
+            if free_above {
+                let new_start = start.saturating_sub(1);
+                let Some(t) = cx.wb.sheet_mut(si).and_then(|sh| sh.tables.get_mut(ti)) else { return Ok(Json::Null) };
+                t.range.start.row = new_start;
+                t.header_row = true;
+                t.filter_button = true;
+                let Some(sh) = cx.wb.sheet_mut(si) else { return Ok(Json::Null) };
+                for (i, name) in names.iter().enumerate() {
+                    sh.set_value(CellRef::new(new_start, c0 + i as u32), gridcraft_core::Value::text(name.as_str()));
+                }
+            } else {
+                // Excel inserts a row's worth of cells over the table's columns and shifts the
+                // table down, keeping whatever sits above it (a value typed in A1 stays in A1).
+                let e = Edit::InsertCells { axis: Axis::Rows, range: RangeRef::new(CellRef::new(start, c0), CellRef::new(start, c1)) };
+                let name = {
+                    let sh = cx.wb.sheet(si).ok_or(EngineError::NoDocument)?;
+                    check_table_shift(sh, &e)?;
+                    let bottom = RangeRef::new(CellRef::new(MAX_ROWS - 1, c0), CellRef::new(MAX_ROWS - 1, c1));
+                    if sh.cells.iter_range(bottom).any(|(_, x)| x.formula.is_some() || !x.value.is_empty()) {
+                        return Err(EngineError::Other(
+                            "To prevent possible loss of data, Excel cannot shift nonblank cells off of the worksheet.".into(),
+                        ));
+                    }
+                    sh.name.clone()
+                };
+                let sh = cx.sheet_mut(si)?;
+                sh.cells.shift_rows_in_cols(c0, c1, start, 1);
+                shift_cell_features(sh, &e);
+                rewrite(&mut cx.wb, &name, &e);
+                let Some(t) = cx.wb.sheet_mut(si).and_then(|sh| sh.tables.get_mut(ti)) else { return Ok(Json::Null) };
+                t.range.start.row = start;
+                t.header_row = true;
+                t.filter_button = true;
+                let Some(sh) = cx.wb.sheet_mut(si) else { return Ok(Json::Null) };
+                for (i, name) in names.iter().enumerate() {
+                    sh.set_value(CellRef::new(start, c0 + i as u32), gridcraft_core::Value::text(name.as_str()));
+                }
             }
         } else {
             let old_start = t.range.start.row;
@@ -488,8 +515,8 @@ fn table_header(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
     })
 }
 
-/// Filter Button: shows or hides the header dropdowns. Turning it off clears the table's filter
-/// criteria and reveals exactly the rows the filter hid, as Excel does. It needs a header row.
+/// Filter Button: shows or hides the header dropdowns, as the Table Design box does. Hiding them
+/// keeps the criteria and the hidden rows; Data › Filter removes the filter. It needs a header row.
 fn table_filter_button(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
     let (si, ti) = find_table(s, p)?;
     edit(s, |cx| {
@@ -499,9 +526,9 @@ fn table_filter_button(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Js
     })
 }
 
-/// Applies Filter Button for the Table Design checkbox and Data › Filter. Turning it off clears
-/// the criteria stored on the table and on a sheet AutoFilter covering it, then reveals only the
-/// rows those criteria hid; rows hidden by hand stay hidden.
+/// Applies Filter Button for the Table Design checkbox: it only shows or hides the header
+/// dropdowns. The criteria and the rows they hide stay as they are; removing the filter is
+/// Data › Filter (`toggle_filter`), which also reveals the rows.
 pub(crate) fn set_table_filter_button(cx: &mut Ctx, si: usize, ti: usize, want: bool) -> Result<()> {
     let Some((header, current)) = cx.wb.sheet(si).and_then(|sh| sh.tables.get(ti)).map(|t| (t.header_row, t.filter_button)) else {
         return Ok(());
@@ -511,9 +538,6 @@ pub(crate) fn set_table_filter_button(cx: &mut Ctx, si: usize, ti: usize, want: 
     }
     if want == current {
         return Ok(());
-    }
-    if !want {
-        clear_table_filter(cx, si, ti);
     }
     if let Some(t) = cx.wb.sheet_mut(si).and_then(|sh| sh.tables.get_mut(ti)) {
         t.filter_button = want;
@@ -525,7 +549,7 @@ pub(crate) fn set_table_filter_button(cx: &mut Ctx, si: usize, ti: usize, want: 
 /// Clears a table's filter (its own `Table::filter` and a sheet AutoFilter covering it) and
 /// reveals the rows those criteria hid. Evaluation is shared with `apply_filter`, so manually
 /// hidden rows that pass the criteria are left hidden.
-fn clear_table_filter(cx: &mut Ctx, si: usize, ti: usize) {
+pub(crate) fn clear_table_filter(cx: &mut Ctx, si: usize, ti: usize) {
     let Some(t) = cx.wb.sheet(si).and_then(|sh| sh.tables.get(ti)) else { return };
     let full = t.range;
     let table_filter = t.filter.clone();
