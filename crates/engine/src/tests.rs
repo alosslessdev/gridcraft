@@ -3239,9 +3239,17 @@ fn ink_to_shape_leaves_a_rotated_right_triangle_as_ink() {
     assert_eq!(r["kind"], "Ink");
     let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
     assert_eq!(sh.kind, gridcraft_model::ShapeKind::Ink);
-    // A long, thin triangle whose right angle sits halfway along the short side (5 points in on
-    // a 10-point side) is rotated too: the tolerance must scale with the shorter side.
-    let r = s.execute("draw.stroke", json!({"points": [[0, 5], [100, 0], [0, 10], [0, 5]]})).unwrap();
+    // A long, thin triangle whose right angle sits 6 points in on the 12-point short side. The
+    // vertex survives simplification (the assertion below), so conversion really reaches
+    // right_triangle_flips: the tolerance must scale with the shorter side (0.15 × 12 = 1.8, not
+    // 0.15 × 100 = 15).
+    let pts: Vec<[f32; 2]> = vec![[0.0, 6.0], [100.0, 0.0], [0.0, 12.0], [0.0, 6.0]];
+    let found = crate::cmd::ink_shape::recognise(&pts);
+    assert!(
+        matches!(&found, Some(crate::cmd::ink_shape::InkShape::Polygon(c)) if c.len() == 3),
+        "the stroke must reach the conversion as a three-corner polygon: {found:?}"
+    );
+    let r = s.execute("draw.stroke", json!({"points": [[0, 6], [100, 0], [0, 12], [0, 6]]})).unwrap();
     assert_eq!(r["kind"], "Ink");
     let sh = s.doc().unwrap().wb.active().unwrap().shapes[1].clone();
     assert_eq!(sh.kind, gridcraft_model::ShapeKind::Ink);
