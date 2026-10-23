@@ -214,9 +214,9 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("PRS", Entry::Finish(Action::Command("pageLayout.printArea"))), // Excel: Set Print Area
     ("PSP", Entry::Finish(Action::Dialog("pageSetup"))),        // Excel: Page Setup
     ("PSZ", Entry::Finish(Action::Command("pageLayout.size"))), // Excel: Size
-    ("PTC", Entry::Finish(Action::Command("pageLayout.themeColors"))), // Excel: Theme Colors; containment(Colors)
-    ("PTE", Entry::Finish(Action::Command("pageLayout.themeEffects"))), // Excel: Theme Effects; containment(Effects)
-    ("PTF", Entry::Finish(Action::Command("pageLayout.themeFonts"))), // Excel: Theme Fonts; containment(Fonts)
+    ("PTC", Entry::Finish(Action::Control("pageLayout.themeColors"))), // Excel: Theme Colors; containment(Colors)
+    ("PTE", Entry::Finish(Action::Control("pageLayout.themeEffects"))), // Excel: Theme Effects; containment(Effects)
+    ("PTF", Entry::Finish(Action::Control("pageLayout.themeFonts"))), // Excel: Theme Fonts; containment(Fonts)
     ("PTH", Entry::Continue),                                   // Excel: Themes; group level:
     ("PTHB", Entry::Finish(Action::Command("pageLayout.theme"))), // Excel: Browse Themes; containment(Themes)
     ("PVG", Entry::Finish(Action::Command("view.gridlines"))),  // Excel: View Gridlines
@@ -342,8 +342,8 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("WJ", Entry::Finish(Action::Control("view.zoom"))),            // Excel: Zoom To 100%; runs the 100% zoom handler (percent param)
     ("WL", Entry::Finish(Action::Command("view.normal"))),          // Excel: Normal View; containment(Normal)
     ("WM", Entry::Continue),                                        // Excel: Macros Menu; group level: containment(Macros)
-    ("WMR", Entry::Finish(Action::Command("view.macros"))),         // Excel: Record Macro; Record Macro (macros menu)
-    ("WMV", Entry::Finish(Action::Command("view.macros"))),         // Excel: View Macros; containment(Macros)
+    ("WMR", Entry::Finish(Action::Command("automate.recordActions"))), // Excel: Record Macro; Record Macro (macros menu)
+    ("WMV", Entry::Finish(Action::Dialog("macros"))),               // Excel: View Macros; containment(Macros)
     ("WN", Entry::Finish(Action::Command("view.newWindow"))),       // Excel: New Window
     ("WP", Entry::Finish(Action::Command("view.pageLayout"))),      // Excel: Page Layout View
     ("WQ", Entry::Finish(Action::Dialog("zoom"))),                  // Excel: Zoom; opens the Zoom dialog
