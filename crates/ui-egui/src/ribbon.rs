@@ -8,7 +8,7 @@ use crate::SheetApp;
 use crate::icons::{self, Icon};
 use crate::keytips::keytip_table;
 use crate::theme::{self, Tokens};
-use crate::widgets::{big_button, color_palette, icon_button, small_button, split_button, toggle_button};
+use crate::widgets::{big_button, color_palette, icon_button, large_split_button, small_button, split_button, toggle_button};
 
 pub const TABS: &[&str] = &["Home", "Insert", "Draw", "Page Layout", "Formulas", "Data", "Review", "View", "Automate"];
 
@@ -1678,13 +1678,22 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("comment", json!({"threaded": true}));
     }
     sep(ui);
-    // Excel folds Text Box and Header & Footer into one Text drop-down.
-    let text_menu = big_button(ui, Icon::TextBox, "Text", "Text Box and Header & Footer", true);
-    for sequence in keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["insert.textBox", "dialog:headerFooter"]) {
-        keytip(app, ui, sequence, text_menu.rect.center_bottom());
+    // Excel folds Text Box and Header & Footer into one Text split button: the body inserts a text
+    // box, the arrow opens the drop-down.
+    let (text_body, text_arrow, text_rect) = large_split_button(ui, Icon::TextBox, "Text", "Text Box", "Text options");
+    for sequence in keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["insert.textBox", "pageLayout.headerFooter"]) {
+        keytip(app, ui, sequence, text_rect.center_bottom());
     }
-    egui::Popup::menu(&text_menu).show(|ui| {
-        for (label, id) in [("Text Box", "insert.textBox"), ("Header & Footer", "dialog:headerFooter")] {
+    if text_body {
+        act(app, "insert.textBox", json!({}));
+    }
+    // NH1 is a control keytip: it starts editing the page header rather than opening the Page
+    // Setup dialog (which stays available from the Page Layout tab).
+    if invoke(app, "pageLayout.headerFooter") {
+        crate::paper_view::start_editing(app);
+    }
+    egui::Popup::menu(&text_arrow).show(|ui| {
+        for (label, id) in [("Text Box", "insert.textBox"), ("Header & Footer", "pageLayout.headerFooter")] {
             let response = ui.add(egui::Button::new(app.ui.language.tr(label)).frame(false).min_size(vec2(220.0, 22.0)));
             if let Some(sequence) = keytip_table::item_letter(app.keytips.prefix().unwrap_or_default(), id) {
                 keytip(app, ui, sequence, pos2(response.rect.right() - 10.0, response.rect.center().y));
