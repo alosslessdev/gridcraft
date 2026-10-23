@@ -698,8 +698,9 @@ fn custom_widths_equal_to_the_default_round_trip() {
 }
 
 /// The four `<gradientFill>` elements are hand-written from ECMA-376 Part 1 §18.8.24
-/// (CT_GradientFill): `degree` is the gradient's direction and defaults to 0, so it is omitted
-/// for the top-to-bottom gradient. No file produced by Excel is committed here.
+/// (CT_GradientFill): `degree` is the gradient's direction, clockwise from the horizontal axis
+/// (0 = left-to-right, 90 = top-to-bottom), and defaults to 0, so it is left out for the
+/// left-to-right gradient. No file produced by Excel is committed here.
 #[test]
 fn gradient_degrees_are_screen_angles() {
     let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">

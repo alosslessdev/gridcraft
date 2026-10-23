@@ -897,11 +897,13 @@ fn fill_gradient(pg: &mut Page, x: f32, y: f32, w: f32, h: f32, g: &GradientFill
     }
     let cw = w / N as f32;
     let ch = h / N as f32;
+    // Resolve theme colours once per cell, not once per tile (`sample` would allocate 256 times).
+    let stops = g.resolved_stops(theme);
     for iy in 0..N {
         for ix in 0..N {
             let u = (ix as f32 + 0.5) / N as f32;
             let v = (iy as f32 + 0.5) / N as f32;
-            if let Some(rgb) = g.sample(u as f64, v as f64, theme) {
+            if let Some(rgb) = g.sample_resolved(&stops, u as f64, v as f64) {
                 // A hair of overlap hides seams between the rectangles.
                 pg.fill_rect(x + ix as f32 * cw, y + iy as f32 * ch, cw + 0.05, ch + 0.05, rgb);
             }
@@ -957,6 +959,7 @@ fn draw_block(pg: &mut Page, b: &Block, gridlines: bool, cf: &mut Option<crate::
         .map(|c| (*c, cell_look(b.wb, b.si, sh, *c, cf)))
         .filter(|(c, l)| {
             l.fill.is_some()
+                || l.gradient.is_some()
                 || l.cf.is_some()
                 || merges.iter().any(|m| m.start == *c)
                 || !sh.value(*c).is_empty()
@@ -2377,6 +2380,25 @@ mod tests {
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.starts_with("%PDF"), "not a PDF");
         assert!(text.matches(" re f").count() > 400, "the gradient was not tessellated: {}", text.matches(" re f").count());
+    }
+
+    /// Gradient formatting alone draws: a blank, formatted cell must not be skipped as empty.
+    #[test]
+    fn blank_gradient_cells_are_drawn_in_the_pdf() {
+        let mut s = s();
+        // A value elsewhere keeps the print area from collapsing to nothing.
+        s.execute("range.setValues", json!({"range": "C3", "values": [[1]]})).unwrap();
+        let fill = Fill::gradient(
+            GradientKind::Linear { degree: 90.0 },
+            vec![GradientStop { position: 0.0, color: Color::Rgb(0xFF0000) }, GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) }],
+        );
+        s.execute("home.formatCells", json!({"range": "A1:B2", "style": {"fill": fill}})).unwrap();
+        let sh = s.doc().unwrap().wb.active().unwrap();
+        assert!(sh.value(CellRef::new(0, 0)).is_empty(), "the gradient cells have no values");
+        let (pdf, pages) = pdf_of(&mut s, json!({"fitToPage": true}));
+        assert!(pages > 0);
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.matches(" re f").count() > 400, "blank gradient cells were skipped: {}", text.matches(" re f").count());
     }
 
     #[test]

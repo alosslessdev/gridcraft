@@ -1329,8 +1329,15 @@ pub(crate) fn paint_quadrant(
                 }
             }
             clip = Rect::from_min_max(pos2(left, rect.top()), pos2(right, rect.bottom()));
-            // Paint over the gridlines the text passes through.
-            if lk.fill.is_none() {
+            // Paint over the gridlines the text passes through, unless a gradient lies under the
+            // text: `grid_bg` would erase a neighbouring cell's gradient.
+            let gradient_under = |from: f32, to: f32| {
+                let (lo, hi) = (from.min(to), from.max(to));
+                (geo.col_at(sh, lo)..=geo.col_at(sh, hi))
+                    .any(|col| col != c.col && wb.styles.get(sh.style_id(CellRef::new(c.row, col))).fill.gradient.is_some())
+            };
+            if lk.fill.is_none() && lk.gradient.is_none() && !gradient_under(clip.left(), rect.left()) && !gradient_under(rect.right(), clip.right())
+            {
                 let inner = Rect::from_min_max(pos2(clip.left() + 1.0, clip.top() + 0.5), pos2(clip.right() - 1.0, clip.bottom() - 1.0));
                 let extra_l = Rect::from_min_max(inner.min, pos2(rect.left() + 1.0, inner.bottom()));
                 let extra_r = Rect::from_min_max(pos2(rect.right() - 1.0, inner.top()), inner.max);
@@ -3104,8 +3111,15 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));
     child.set_clip_rect(clip);
     // The theme's caret is meant for the UI chrome and vanishes on some fills (and, in the dark
-    // theme, on the white paper): pick black or white against the fill, like Excel.
-    child.visuals_mut().text_cursor.stroke.color = ink_on(fill);
+    // theme, on the white paper): pick black or white against what is under the caret, like Excel.
+    let caret_byte = ed.text.char_indices().nth(ed.caret).map_or(ed.text.len(), |(i, _)| i);
+    let before_caret = &ed.text[..caret_byte];
+    let caret_line = before_caret.matches('\n').count();
+    let caret_x = ui.painter().layout_no_wrap(before_caret.rsplit('\n').next().unwrap_or("").to_string(), font.clone(), Color32::BLACK).size().x;
+    let u = ((caret_x + 2.0) / erect.width().max(1.0)).clamp(0.0, 1.0) as f64;
+    let v = if wrap { ((caret_line as f32 + 0.5) / lines.max(1.0)).clamp(0.0, 1.0) as f64 } else { 0.5 };
+    let caret_bg = gradient.as_ref().and_then(|g| g.sample(u, v, &wb.theme)).map_or(fill, |rgb| Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+    child.visuals_mut().text_cursor.stroke.color = ink_on(caret_bg);
     crate::formula_bar::editor_widget(app, &mut child, id, font, wrap, erect.width() - 4.0);
 }
 
