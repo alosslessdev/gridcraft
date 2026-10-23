@@ -638,6 +638,29 @@ fn check_performance_dialog_says_when_there_is_nothing_to_fix() {
 }
 
 #[test]
+fn check_performance_dialog_labels_come_from_the_translation_catalog() {
+    let mut s = blank();
+    s.execute("home.bold", json!({"range": "B2"})).unwrap();
+    let mut h = harness(s);
+    h.state_mut().run("app.language.set", json!({"language": "pt"})).unwrap();
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    assert!(h.query_by_label("1 células usadas · 1 podem ser otimizadas").is_some(), "the counts are translated");
+    assert!(h.query_by_label("Otimizar tudo").is_some());
+    assert!(h.query_by_label("Otimizar planilha").is_some());
+    assert!(h.query_by_label("Células a otimizar").is_some());
+    assert!(h.query_by_label("Ir para").is_some());
+    assert!(
+        h.query_by_label("Otimizar também limpa a formatação definida em células vazias, como preenchimentos, bordas e formatos de número.")
+            .is_some(),
+        "the warning about deliberate formatting is translated"
+    );
+    h.get_by_label("Otimizar tudo").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Nenhum problema de desempenho encontrado.").is_some());
+}
+
+#[test]
 fn check_performance_optimize_all_clears_unused_formatting_and_refreshes() {
     let mut s = blank();
     s.execute("home.bold", json!({"range": "A1"})).unwrap();
