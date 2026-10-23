@@ -1547,30 +1547,33 @@ fn cf_style(rule: &Json, cmd: &str) -> Result<Style> {
 }
 
 fn cf_value_kind(v: Option<&Json>, default: CfValueKind, cmd: &str) -> Result<CfValueKind> {
-    match v {
-        Some(Json::Object(o)) => {
-            let t = o.get("type").and_then(Json::as_str).unwrap_or("num");
-            let val = o.get("value").and_then(Json::as_f64).unwrap_or(0.0);
-            Ok(match t {
-                "min" => CfValueKind::Min,
-                "max" => CfValueKind::Max,
-                // The dialog clamps these to 0-100; engine callers get the same range.
-                "percent" => CfValueKind::Percent(val.clamp(0.0, 100.0)),
-                "percentile" => CfValueKind::Percentile(val.clamp(0.0, 100.0)),
-                "formula" => {
-                    let f = o.get("value").and_then(Json::as_str).unwrap_or("");
-                    if f.trim().is_empty() {
-                        return Err(bad(cmd, "a formula stop needs a formula"));
-                    }
-                    // Stored exactly: the evaluator takes the formula as written.
-                    CfValueKind::Formula(f.into())
-                }
-                "num" => CfValueKind::Number(val),
-                other => return Err(bad(cmd, format!("unknown stop type `{other}`"))),
-            })
+    let Some(Json::Object(o)) = v else { return Ok(default) };
+    let t = o.get("type").and_then(Json::as_str).unwrap_or("num");
+    // A value that is given must be a number: a string used to be read as 0 without a word.
+    // Only an omitted `value` defaults to zero.
+    let number = || -> Result<f64> {
+        match o.get("value") {
+            None => Ok(0.0),
+            Some(v) => v.as_f64().ok_or_else(|| bad(cmd, format!("the `{t}` stop's `value` must be a number, not {v}"))),
         }
-        _ => Ok(default),
-    }
+    };
+    Ok(match t {
+        "min" => CfValueKind::Min,
+        "max" => CfValueKind::Max,
+        // The dialog clamps these to 0-100; engine callers get the same range.
+        "percent" => CfValueKind::Percent(number()?.clamp(0.0, 100.0)),
+        "percentile" => CfValueKind::Percentile(number()?.clamp(0.0, 100.0)),
+        "formula" => {
+            let f = o.get("value").and_then(Json::as_str).unwrap_or("");
+            if f.trim().is_empty() {
+                return Err(bad(cmd, "a formula stop needs a formula"));
+            }
+            // Stored exactly: the evaluator takes the formula as written.
+            CfValueKind::Formula(f.into())
+        }
+        "num" => CfValueKind::Number(number()?),
+        other => return Err(bad(cmd, format!("unknown stop type `{other}`"))),
+    })
 }
 
 fn cf_rule(rule: &Json, cmd: &str) -> Result<CfRule> {
@@ -2012,6 +2015,55 @@ mod tests {
         let rule: CfRule = serde_json::from_value(s.execute("home.manageRules", json!({})).unwrap()["rules"][0]["rule"].clone()).unwrap();
         let CfRule::Expression { formula, .. } = rule else { panic!("expected a formula rule, got {rule:?}") };
         assert_eq!(formula, "A1>2");
+    }
+
+    #[test]
+    fn a_given_stop_value_must_be_a_number() {
+        let mut s = Session::new();
+        s.new_workbook();
+        for ty in ["num", "percent", "percentile"] {
+            let err = s
+                .execute(
+                    "home.conditionalFormat",
+                    json!({"range": "A1:A3", "rule": {"type": "colorScale", "stops": [
+                        {"type": ty, "value": "5", "color": "#112233"},
+                        {"type": "max", "color": "#778899"},
+                    ]}}),
+                )
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("home.conditionalFormat"), "{ty}: {err}");
+            assert!(err.contains(&format!("`{ty}` stop's `value` must be a number")), "{ty}: {err}");
+        }
+        // A refused scale stores nothing.
+        let rules = s.execute("home.manageRules", json!({})).unwrap();
+        assert_eq!(rules["rules"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn an_omitted_stop_value_is_zero() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute(
+            "home.conditionalFormat",
+            json!({"range": "A1:A3", "rule": {"type": "colorScale", "stops": [
+                {"type": "num", "color": "#112233"},
+                {"type": "percent", "color": "#445566"},
+                {"type": "percentile", "color": "#778899"},
+            ]}}),
+        )
+        .unwrap();
+        let list = s.execute("home.manageRules", json!({})).unwrap();
+        let rule: CfRule = serde_json::from_value(list["rules"][0]["rule"].clone()).unwrap();
+        let CfRule::ColorScale { stops } = rule else { panic!("expected a colour scale") };
+        assert_eq!(
+            stops,
+            vec![
+                (CfValueKind::Number(0.0), Color::Rgb(0x112233)),
+                (CfValueKind::Percent(0.0), Color::Rgb(0x445566)),
+                (CfValueKind::Percentile(0.0), Color::Rgb(0x778899)),
+            ]
+        );
     }
 
     #[test]
