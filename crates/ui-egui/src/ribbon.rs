@@ -2594,7 +2594,18 @@ fn table_design(app: &mut SheetApp, ui: &mut Ui) {
     let Some((tname, header, totals, banded, banded_c, first, last, filter, style, external)) = app.session.active().and_then(|d| {
         let sh = d.wb.active()?;
         let t = sh.table_at(d.selection.active)?;
-        Some((t.name.clone(), t.header_row, t.totals_row, t.banded_rows, t.banded_cols, t.first_col, t.last_col, t.filter_button, t.style.clone(), t.is_external()))
+        Some((
+            t.name.clone(),
+            t.header_row,
+            t.totals_row,
+            t.banded_rows,
+            t.banded_cols,
+            t.first_col,
+            t.last_col,
+            t.filter_button,
+            t.style.clone(),
+            t.is_external(),
+        ))
     }) else {
         return;
     };
