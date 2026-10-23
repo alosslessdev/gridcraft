@@ -121,7 +121,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shapes",
             ["Insert", "Illustrations"],
             None,
-            "{kind: rectangle|roundedRectangle|ellipse|triangle|line|arrow|textBox, at?, width?, height?, text?, fill?, line?}",
+            "{kind: rectangle|roundedRectangle|ellipse|triangle|rightTriangle|diamond|parallelogram|trapezoid|pentagon|hexagon|blockArrow|doubleArrow|line|arrow|textBox, at?, width?, height?, text?, fill?, line?}",
             has_doc,
             insert_shape
         ),
