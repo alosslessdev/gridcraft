@@ -181,7 +181,18 @@ fn convert_at(sheet: &mut Sheet, idx: usize) -> Option<ShapeKind> {
         }
         InkShape::Rectangle { .. } => (ShapeKind::Rectangle, None),
         InkShape::Ellipse { .. } => (ShapeKind::Ellipse, None),
-        InkShape::Polygon(c) => (polygon_kind(c)?, None),
+        InkShape::Polygon(c) => {
+            let kind = polygon_kind(c)?;
+            if kind == ShapeKind::RightTriangle {
+                // GridCraft's preset has its right angle at the box's bottom-left; flips move it
+                // to the corner the stroke drew it at.
+                let (flip_h, flip_v) = right_triangle_flips(c);
+                let [x, y, w, h] = found.bounds();
+                (kind, Some((box_anchor(sheet, idx, x, y, w.max(1.0), h.max(1.0))?, flip_h, flip_v)))
+            } else {
+                (kind, None)
+            }
+        }
     };
     // Excel's square and circle are the same presets with equal sides: take the recogniser's
     // snapped bounds (origin included, it centres a grown square) so the shape reads as one.
@@ -248,6 +259,25 @@ fn triangle_kind(p: &[[f32; 2]]) -> ShapeKind {
     let (a, b, c) = (sorted[0], sorted[1], sorted[2]);
     // The right angle sits opposite the longest side.
     if (a * a + b * b - c * c).abs() < 0.08 * c * c { ShapeKind::RightTriangle } else { ShapeKind::Triangle }
+}
+
+/// The flips that move GridCraft's `RightTriangle` preset (right angle at the box's bottom-left)
+/// onto the recognised right angle: across for a corner on the right half, down for one at the
+/// top.
+fn right_triangle_flips(p: &[[f32; 2]]) -> (bool, bool) {
+    if p.len() != 3 {
+        return (false, false);
+    }
+    // Each side is opposite the corner with the same index; the right angle is opposite the
+    // hypotenuse, the longest side.
+    let sides = [dist(p[1], p[2]), dist(p[2], p[0]), dist(p[0], p[1])];
+    let right = (1..3).fold(0, |m, i| if sides[i] > sides[m] { i } else { m });
+    let Some(v) = p.get(right) else { return (false, false) };
+    let x0 = p.iter().map(|q| q[0]).fold(f32::INFINITY, f32::min);
+    let x1 = p.iter().map(|q| q[0]).fold(f32::NEG_INFINITY, f32::max);
+    let y0 = p.iter().map(|q| q[1]).fold(f32::INFINITY, f32::min);
+    let y1 = p.iter().map(|q| q[1]).fold(f32::NEG_INFINITY, f32::max);
+    (v[0] > (x0 + x1) / 2.0, v[1] < (y0 + y1) / 2.0)
 }
 
 fn quad_kind(p: &[[f32; 2]]) -> Option<ShapeKind> {

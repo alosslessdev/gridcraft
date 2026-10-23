@@ -3075,6 +3075,25 @@ fn ink_to_shape_maps_a_square_standing_on_its_corner_to_a_diamond() {
 }
 
 #[test]
+fn ink_to_shape_keeps_a_right_triangles_right_angle_corner() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    // Right angle at the bottom-right: flip across, not down.
+    let r = s.execute("draw.stroke", json!({"points": [[100, 0], [100, 100], [0, 100], [100, 0]]})).unwrap();
+    assert_eq!(r["kind"], "RightTriangle");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::RightTriangle);
+    assert!(sh.format.flip_h, "the right angle belongs on the right: {:?}", sh.format);
+    assert!(!sh.format.flip_v);
+    // Right angle at the top-left: flip down, not across.
+    s.execute("draw.stroke", json!({"points": [[0, 0], [100, 0], [0, 100], [0, 0]]})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[1].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::RightTriangle);
+    assert!(!sh.format.flip_h, "the right angle belongs on the left: {:?}", sh.format);
+    assert!(sh.format.flip_v);
+}
+
+#[test]
 fn ink_to_shape_leaves_an_unrecognised_stroke_as_ink_and_draw_stroke_succeeds() {
     let mut s = s();
     s.execute("draw.inkToShape", json!({"on": true})).unwrap();
