@@ -317,7 +317,9 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                             "Formulas" => formulas(app, ui),
                             "Data" => data(app, ui),
                             "Review" => review(app, ui),
-                            "View" => view(app, ui),
+                            // The View tab is the widest: it gets the card's width to decide whether
+                            // its natural layout fits.
+                            "View" => view(app, ui, inner.width()),
                             "Automate" => automate(app, ui),
                             "Table Design" => table_design(app, ui),
                             "Chart Design" => chart_design(app, ui),
@@ -461,8 +463,12 @@ fn contextual_tabs(app: &SheetApp) -> Vec<&'static str> {
 }
 
 fn sep(ui: &mut Ui) {
+    sep_wide(ui, 13.0);
+}
+
+fn sep_wide(ui: &mut Ui, width: f32) {
     let t = Tokens::get(ui.ctx());
-    let (r, _) = ui.allocate_exact_size(vec2(13.0, 72.0), Sense::hover());
+    let (r, _) = ui.allocate_exact_size(vec2(width, 72.0), Sense::hover());
     ui.painter().line_segment([pos2(r.center().x, r.top() + 6.0), pos2(r.center().x, r.bottom() - 6.0)], Stroke::new(1.0, t.separator));
 }
 
@@ -2675,8 +2681,28 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
     }
 }
 
-/// Draws the View tab: view modes, ruler/gridlines/formula-bar/headings toggles, zoom, freeze panes, theme, animations, interface size and language.
-fn view(app: &mut SheetApp, ui: &mut Ui) {
+/// How much room the View tab keeps free at the right edge: its label widths follow the font
+/// (the Linux CI fonts are about 7% wider than Windows'), so a small overflow has to be expected.
+const VIEW_TAB_MARGIN: f32 = 28.0;
+
+/// The View tab, which carries the most controls. Its natural width depends on the font's measured
+/// labels, so when that width does not fit the card it switches to a compact layout (tighter
+/// spacing and separators, narrower setting boxes, icon-only window buttons) instead of scrolling
+/// its last groups — Display theme, Animations, the language box and Macros — out of view.
+fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
+    let layout_id = egui::Id::unique("ribbon.view.layout");
+    let (mut compact, last_viewport) = ui.ctx().data(|d| d.get_temp::<(bool, f32)>(layout_id)).unwrap_or((false, 0.0));
+    // A resize re-decides: start wide again and compact only if that does not fit.
+    if (viewport - last_viewport).abs() > 40.0 {
+        compact = false;
+    }
+    if compact {
+        ui.spacing_mut().item_spacing.x = 1.0;
+    }
+    let break_width = if compact { 8.0 } else { 13.0 };
+    let theme_w = if compact { 80.0 } else { 88.0 };
+    let scale_w = if compact { 80.0 } else { 88.0 };
+    let language_w = if compact { 88.0 } else { 100.0 };
     let t = Tokens::get(ui.ctx());
     let _ = t;
     for (icon, label, cmd) in [
@@ -2696,7 +2722,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         act(app, "view.customViews", json!({}));
     }
-    sep(ui);
+    sep_wide(ui, break_width);
     let s = app.session.active().and_then(|d| d.wb.active().map(|s| (s.show_gridlines, s.show_headings))).unwrap_or((true, true));
     let lang = app.ui.language;
     let page_layout =
@@ -2732,7 +2758,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             act(app, "view.headings", json!({"on": h}));
         }
     });
-    sep(ui);
+    sep_wide(ui, break_width);
     let __k = big_button(ui, Icon::Zoom, "Zoom", "Zoom…", false);
     control_keytip(app, ui, &__k, "dialog:zoom");
     if __k.clicked() {
@@ -2749,7 +2775,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         let r = app.grid.cells_rect.unwrap_or(Rect::from_min_size(pos2(0.0, 0.0), vec2(1200.0, 700.0)));
         act(app, "view.zoomToSelection", json!({"viewWidth": r.width(), "viewHeight": r.height()}));
     }
-    sep(ui);
+    sep_wide(ui, break_width);
     // The Window group as Excel stacks it: New Window, Arrange All and Freeze Panes across, the
     // three window commands down a column, then Switch Windows — not seven controls in one row,
     // which pushed the rest of the tab out of view.
@@ -2785,19 +2811,19 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         );
     });
     ui.vertical(|ui| {
-        let __k = small_button(ui, Icon::PageBreak, "Split", "Split", false);
+        let __k = small_button(ui, Icon::PageBreak, if compact { "" } else { "Split" }, "Split", false);
         __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Split"));
         control_keytip(app, ui, &__k, "view.split");
         if __k.clicked() {
             act(app, "view.split", json!({}));
         }
-        let __k = small_button(ui, Icon::Close, "Hide", "Hide Window", false);
+        let __k = small_button(ui, Icon::Close, if compact { "" } else { "Hide" }, "Hide Window", false);
         __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Hide"));
         control_keytip(app, ui, &__k, "view.hideWindow");
         if __k.clicked() {
             act(app, "view.hideWindow", json!({}));
         }
-        let __k = small_button(ui, Icon::OpenFolder, "Unhide", "Unhide Window", false);
+        let __k = small_button(ui, Icon::OpenFolder, if compact { "" } else { "Unhide" }, "Unhide Window", false);
         __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Unhide"));
         control_keytip(app, ui, &__k, "view.unhideWindow");
         if __k.clicked() {
@@ -2820,7 +2846,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         };
         egui::ComboBox::from_id_salt("display_theme")
             .selected_text(lang.tr(label))
-            .width(88.0)
+            .width(theme_w)
             .show_ui(ui, |ui| {
                 for (value, label) in [("system", "System"), ("light", "Light"), ("dark", "Dark")] {
                     if ui.selectable_label(mode == value, lang.tr(label)).clicked() {
@@ -2847,7 +2873,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
         egui::ComboBox::from_id_salt("ui_interface_size")
-            .width(88.0)
+            .width(scale_w)
             .selected_text(egui::RichText::new(text(current)).font(theme::ui_font(12.5)))
             .show_ui(ui, |ui| {
                 for v in [100, 75, 90, 110, 125, 150, 175, 200] {
@@ -2858,7 +2884,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             });
         let label = ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
         egui::ComboBox::from_id_salt("ui_language")
-            .width(100.0)
+            .width(language_w)
             .selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5)))
             .show_ui(ui, |ui| {
                 for l in crate::i18n::Language::ALL {
@@ -2870,7 +2896,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             .response
             .labelled_by(label.id);
     });
-    sep(ui);
+    sep_wide(ui, break_width);
     // Macros
     let mb = big_button(ui, Icon::Script, "Macros", "Macros and scripts", true);
     mb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Macros"));
@@ -2887,6 +2913,13 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             ui.close();
         }
     });
+    // What the tab actually used, so the next frame can compact it if it did not fit with room to
+    // spare. Staying compact until the card is resized keeps this from flip-flopping between frames.
+    let used = ui.min_rect().width();
+    if !compact && used > viewport - VIEW_TAB_MARGIN {
+        compact = true;
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(layout_id, (compact, viewport)));
 }
 
 fn automate(app: &mut SheetApp, ui: &mut Ui) {
