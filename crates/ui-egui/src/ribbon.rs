@@ -1279,6 +1279,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui);
     // Add-ins
     let __k = big_button(ui, Icon::Theme, "Add-ins", "Add-ins", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Add-ins"));
     control_keytip(app, ui, &__k, "home.addIns");
     if __k.clicked() {
         act(app, "home.addIns", json!({}));
@@ -1811,6 +1812,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "insert.slicer", json!({}));
     }
     let __k = big_button(ui, Icon::Chart, "PivotChart", "PivotChart", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "PivotChart"));
     control_keytip(app, ui, &__k, "insert.pivotChart");
     if __k.clicked() {
         act(app, "insert.pivotChart", json!({}));
@@ -1923,8 +1925,11 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
         }
     });
     ui.vertical(|ui| {
+        // The Colors, Fonts and Effects menus open by keytip too (PTC/PTF/PTE), as Excel's do.
         let colors = small_button(ui, Icon::Fill, "Colors", "Theme colors", true);
-        egui::Popup::menu(&colors).show(|ui| {
+        control_keytip(app, ui, &colors, "pageLayout.themeColors");
+        let forced = invoke(app, "pageLayout.themeColors");
+        egui::Popup::menu(&colors).open_memory(popup_command(forced, colors.clicked())).show(|ui| {
             for (name, _) in gridcraft_engine::cmd::view::themes() {
                 if ui.button(name).clicked() {
                     act(app, "pageLayout.themeColors", json!({"name": name}));
@@ -1933,7 +1938,9 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             }
         });
         let fonts = small_button(ui, Icon::FontColor, "Fonts", "Theme fonts", true);
-        egui::Popup::menu(&fonts).show(|ui| {
+        control_keytip(app, ui, &fonts, "pageLayout.themeFonts");
+        let forced = invoke(app, "pageLayout.themeFonts");
+        egui::Popup::menu(&fonts).open_memory(popup_command(forced, fonts.clicked())).show(|ui| {
             for f in FONTS {
                 if ui.button(*f).clicked() {
                     act(app, "pageLayout.themeFonts", json!({"major": f, "minor": f}));
@@ -1942,7 +1949,9 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             }
         });
         let effects = small_button(ui, Icon::Sparkline, "Effects", "Theme effects", true);
-        egui::Popup::menu(&effects).show(|ui| {
+        control_keytip(app, ui, &effects, "pageLayout.themeEffects");
+        let forced = invoke(app, "pageLayout.themeEffects");
+        egui::Popup::menu(&effects).open_memory(popup_command(forced, effects.clicked())).show(|ui| {
             for (label, name) in [("Subtle", "subtle"), ("Medium", "medium"), ("Intense", "intense")] {
                 if ui.button(lang.tr(label)).clicked() {
                     act(app, "pageLayout.themeEffects", json!({"name": name}));
@@ -2440,6 +2449,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "data.refreshAll", json!({}));
     }
     let __k = big_button(ui, Icon::Book, "Queries &\nConnections", "Queries & Connections", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Queries & Connections"));
     control_keytip(app, ui, &__k, "data.queriesConnections");
     if __k.clicked() {
         act(app, "data.queriesConnections", json!({}));
@@ -2496,6 +2506,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "edit.flashFill", json!({}));
     }
     let __k = big_button(ui, Icon::Merge, "Consolidate", "Consolidate", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Consolidate"));
     control_keytip(app, ui, &__k, "data.consolidate");
     if __k.clicked() {
         act(app, "data.consolidate", json!({}));
@@ -2587,6 +2598,7 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("spelling", json!({}));
     }
     let __k = big_button(ui, Icon::Book, "Thesaurus", "Thesaurus", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Thesaurus"));
     control_keytip(app, ui, &__k, "review.thesaurus");
     if __k.clicked() {
         act(app, "review.thesaurus", json!({}));
@@ -2680,7 +2692,8 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             act(app, cmd, json!({}));
         }
     }
-    let __k = small_button(ui, Icon::Book, "Custom Views", "Custom Views", false);
+    let __k = big_button(ui, Icon::Book, "Custom\nViews", "Custom Views", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Custom Views"));
     control_keytip(app, ui, &__k, "view.customViews");
     if __k.clicked() {
         act(app, "view.customViews", json!({}));
@@ -2739,17 +2752,23 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "view.zoomToSelection", json!({"viewWidth": r.width(), "viewHeight": r.height()}));
     }
     sep(ui);
-    let __k = small_button(ui, Icon::NewFile, "New Window", "New Window", false);
+    // The Window group as Excel stacks it: New Window, Arrange All and Freeze Panes across, the
+    // three window commands down a column, then Switch Windows — not seven controls in one row,
+    // which pushed the rest of the tab out of view.
+    let __k = big_button(ui, Icon::NewFile, "New\nWindow", "New Window", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "New Window"));
     control_keytip(app, ui, &__k, "view.newWindow");
     if __k.clicked() {
         act(app, "view.newWindow", json!({}));
     }
-    let __k = small_button(ui, Icon::Gridlines, "Arrange All", "Arrange All", false);
+    let __k = big_button(ui, Icon::Gridlines, "Arrange\nAll", "Arrange All", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Arrange All"));
     control_keytip(app, ui, &__k, "view.arrangeAll");
     if __k.clicked() {
         act(app, "view.arrangeAll", json!({}));
     }
     let fp = big_button(ui, Icon::Freeze, "Freeze\nPanes", "Freeze Panes", true);
+    fp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Freeze Panes"));
     for sequence in
         keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["view.freezePanes", "view.freezeTopRow", "view.freezeFirstColumn"])
     {
@@ -2767,22 +2786,28 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             ],
         );
     });
-    let __k = small_button(ui, Icon::PageBreak, "Split", "Split", false);
-    control_keytip(app, ui, &__k, "view.split");
-    if __k.clicked() {
-        act(app, "view.split", json!({}));
-    }
-    let __k = small_button(ui, Icon::Close, "Hide", "Hide Window", false);
-    control_keytip(app, ui, &__k, "view.hideWindow");
-    if __k.clicked() {
-        act(app, "view.hideWindow", json!({}));
-    }
-    let __k = small_button(ui, Icon::OpenFolder, "Unhide", "Unhide Window", false);
-    control_keytip(app, ui, &__k, "view.unhideWindow");
-    if __k.clicked() {
-        act(app, "view.unhideWindow", json!({}));
-    }
+    ui.vertical(|ui| {
+        let __k = small_button(ui, Icon::PageBreak, "Split", "Split", false);
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Split"));
+        control_keytip(app, ui, &__k, "view.split");
+        if __k.clicked() {
+            act(app, "view.split", json!({}));
+        }
+        let __k = small_button(ui, Icon::Close, "Hide", "Hide Window", false);
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Hide"));
+        control_keytip(app, ui, &__k, "view.hideWindow");
+        if __k.clicked() {
+            act(app, "view.hideWindow", json!({}));
+        }
+        let __k = small_button(ui, Icon::OpenFolder, "Unhide", "Unhide Window", false);
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Unhide"));
+        control_keytip(app, ui, &__k, "view.unhideWindow");
+        if __k.clicked() {
+            act(app, "view.unhideWindow", json!({}));
+        }
+    });
     let __k = big_button(ui, Icon::Folder, "Switch\nWindows", "Switch Windows", false);
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Switch Windows"));
     control_keytip(app, ui, &__k, "view.switchWindows");
     if __k.clicked() {
         act(app, "view.switchWindows", json!({}));
@@ -2813,14 +2838,18 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
             act(app, "view.animations", json!({"on": animations}));
         }
     });
-    sep(ui);
-    // Interface size (issue #230): scales the whole window on top of the desktop's scale.
+    // Interface size (issue #230) and interface language: two settings in one column, so the View
+    // tab still fits a 1200 px window. The language's own label follows the current language so it
+    // stays readable; the choices are always shown in their own script.
     ui.vertical(|ui| {
+        // Two label-and-box rows share the ribbon's height: shorter boxes keep the second one
+        // inside the card.
+        ui.spacing_mut().interact_size.y = 20.0;
         let label = ui.label(egui::RichText::new(lang.tr("Interface size")).font(theme::ui_font(11.5)).color(t.text_dim));
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
         egui::ComboBox::from_id_salt("ui_interface_size")
-            .width(120.0)
+            .width(88.0)
             .selected_text(egui::RichText::new(text(current)).font(theme::ui_font(12.5)))
             .show_ui(ui, |ui| {
                 for v in [100, 75, 90, 110, 125, 150, 175, 200] {
@@ -2828,16 +2857,10 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
                         act(app, "view.interfaceScale", json!({"percent": v}));
                     }
                 }
-            })
-            .response
-            .labelled_by(label.id);
-    });
-    // Interface language: settings live in the View tab, like Excel's Options. The label follows
-    // the current language so it stays readable; the choices are always shown in their own script.
-    ui.vertical(|ui| {
+            });
         let label = ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
         egui::ComboBox::from_id_salt("ui_language")
-            .width(120.0)
+            .width(100.0)
             .selected_text(egui::RichText::new(lang.name()).font(theme::ui_font(12.5)))
             .show_ui(ui, |ui| {
                 for l in crate::i18n::Language::ALL {
@@ -2852,6 +2875,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui);
     // Macros
     let mb = big_button(ui, Icon::Script, "Macros", "Macros and scripts", true);
+    mb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Macros"));
     control_keytip(app, ui, &mb, "view.macros");
     egui::Popup::menu(&mb).show(|ui| {
         if ui.button(lang.tr("View Macros…")).clicked() {
