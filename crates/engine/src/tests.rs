@@ -1731,8 +1731,10 @@ fn tables_and_structured_refs() {
 #[test]
 fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
     let mut s = s();
-    s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty"], ["x", 2]]})).unwrap();
-    s.execute("insert.table", json!({"range": "A1:B2", "header": true, "name": "Data"})).unwrap();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty"], ["x", 2], ["y", 5]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:B3", "header": true, "name": "Data"})).unwrap();
+    s.execute("table.totalRow", json!({"on": true, "table": "Data"})).unwrap();
+    s.execute("table.style", json!({"table": "Data", "style": "TableStyleMedium9"})).unwrap();
     {
         let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
         let t = &mut wb.sheet_mut(0).unwrap().tables[0];
@@ -1743,7 +1745,14 @@ fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
             Some(gridcraft_model::XmlColumnPr { map_id: 1, xpath: "/DataList/Item/Item".into(), data_type: "string".into(), denormalized: false });
         t.filter = vec![(1, gridcraft_model::FilterCriterion::Values { values: vec!["2".into()], blanks: false })];
     }
-    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].is_external());
+    {
+        let d = s.doc().unwrap();
+        let t = &d.wb.active().unwrap().tables[0];
+        assert!(t.is_external());
+        assert!(t.totals_row);
+        assert_eq!(t.style, "TableStyleMedium9");
+        assert_eq!(t.columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Item", "Qty"]);
+    }
 
     s.execute("table.unlink", json!({"table": "Data"})).unwrap();
     {
@@ -1753,6 +1762,9 @@ fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
         assert_eq!(t.table_type, None);
         assert_eq!(t.connection_id, None);
         assert!(t.columns.iter().all(|c| c.unique_name.is_none() && c.xml.is_none()));
+        assert_eq!(t.columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Item", "Qty"], "column names stay");
+        assert!(t.totals_row, "the totals row stays");
+        assert_eq!(t.style, "TableStyleMedium9", "the table style stays");
         assert_eq!(t.filter.len(), 1, "filter criteria stay");
     }
     assert_eq!(v(&s, "B2"), Value::Number(2.0), "the data stays");
@@ -1767,6 +1779,9 @@ fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
     let t = &d.wb.active().unwrap().tables[0];
     assert!(!t.is_external());
     assert_eq!(t.filter.len(), 1);
+    assert_eq!(t.columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Item", "Qty"], "column names survive the save");
+    assert!(t.totals_row, "the totals row survives the save");
+    assert_eq!(t.style, "TableStyleMedium9", "the table style survives the save");
 
     // A plain table has nothing to unlink.
     s.execute("insert.table", json!({"range": "D1:D2", "header": true, "name": "Plain"})).unwrap();
