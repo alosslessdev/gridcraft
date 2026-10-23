@@ -1723,7 +1723,9 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Cell Controls (Excel keeps them after Illustrations).
-    if big_button(ui, Icon::Checkbox, "Checkbox", "Insert checkboxes in the selected cells", false).clicked() {
+    let cb = big_button(ui, Icon::Checkbox, "Checkbox", "Insert checkboxes in the selected cells", false);
+    cb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Checkbox"));
+    if cb.clicked() {
         act(app, "insert.checkbox", json!({}));
     }
     sep(ui);
@@ -1827,11 +1829,6 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
     });
-    sep(ui);
-    // Cell Controls.
-    if big_button(ui, Icon::Checkbox, "Checkbox", "Insert checkboxes in the selected cells", false).clicked() {
-        act(app, "insert.checkbox", json!({}));
-    }
     sep(ui);
     let __k = big_button(ui, Icon::Link, "Link", "Insert Link", false);
     control_keytip(app, ui, &__k, "dialog:insertLink");
@@ -2876,7 +2873,9 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
     // Macros
     let mb = big_button(ui, Icon::Script, "Macros", "Macros and scripts", true);
     mb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Macros"));
-    control_keytip(app, ui, &mb, "view.macros");
+    // WM is the menu's own badge (WMR Record Actions, WMV View Macros), so it is shown on the
+    // button rather than looking up a badge for `view.macros`, which no sequence targets.
+    anchor_keytip(app, ui, &mb, &["automate.recordActions", "dialog:macros"]);
     egui::Popup::menu(&mb).show(|ui| {
         if ui.button(lang.tr("View Macros…")).clicked() {
             app.open_dialog("macros", json!({}));
