@@ -2487,21 +2487,16 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
     }
 }
 
-/// How much room the View tab keeps free at the right edge: its label widths follow the font
-/// (the Linux CI fonts are about 7% wider than Windows'), so a small overflow has to be expected.
-const VIEW_TAB_MARGIN: f32 = 28.0;
+/// The card width below which the View tab uses its compact layout. A constant, not a measurement:
+/// the tab must not depend on font metrics or frame order, and 1280 leaves the wide layout room on
+/// a maximised window while keeping the compact one comfortably inside 1200 px on every font.
+const VIEW_TAB_COMPACT_WIDTH: f32 = 1280.0;
 
-/// The View tab, which carries the most controls. Its natural width depends on the font's measured
-/// labels, so when that width does not fit the card it switches to a compact layout (tighter
-/// spacing and separators, narrower setting boxes, icon-only window buttons) instead of scrolling
-/// its last groups — Display theme, Animations, the language box and Macros — out of view.
+/// The View tab, which carries the most controls: below [`VIEW_TAB_COMPACT_WIDTH`] it uses tighter
+/// spacing and separators, narrower setting boxes and icon-only window buttons, so Display theme,
+/// Animations, the language box and Macros stay in view instead of scrolling past the card's edge.
 fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
-    let layout_id = egui::Id::new("ribbon.view.layout");
-    let (mut compact, last_viewport) = ui.ctx().data(|d| d.get_temp::<(bool, f32)>(layout_id)).unwrap_or((false, 0.0));
-    // A resize re-decides: start wide again and compact only if that does not fit.
-    if (viewport - last_viewport).abs() > 40.0 {
-        compact = false;
-    }
+    let compact = viewport < VIEW_TAB_COMPACT_WIDTH;
     if compact {
         ui.spacing_mut().item_spacing.x = 1.0;
     }
@@ -2712,13 +2707,6 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
             ui.close();
         }
     });
-    // What the tab actually used, so the next frame can compact it if it did not fit with room to
-    // spare. Staying compact until the card is resized keeps this from flip-flopping between frames.
-    let used = ui.min_rect().width();
-    if !compact && used > viewport - VIEW_TAB_MARGIN {
-        compact = true;
-    }
-    ui.ctx().data_mut(|d| d.insert_temp(layout_id, (compact, viewport)));
 }
 
 fn automate(app: &mut SheetApp, ui: &mut Ui) {
