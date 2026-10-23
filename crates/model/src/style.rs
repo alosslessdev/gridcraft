@@ -359,10 +359,6 @@ impl GradientFill {
         if stops.is_empty() {
             stops.push(GradientStop { position: 0.0, color: Color::Auto });
         }
-        if stops.len() == 1 {
-            let first = stops[0];
-            stops.push(GradientStop { position: 1.0, color: first.color });
-        }
         GradientFill { kind: kind.normalized(), stops }
     }
 

@@ -1408,11 +1408,12 @@ pub(crate) fn paint_quadrant(
             }
             clip = Rect::from_min_max(pos2(left, rect.top()), pos2(right, rect.bottom()));
             // Paint over the gridlines the text passes through, unless a gradient lies under the
-            // text: `grid_bg` would erase a neighbouring cell's gradient.
-            let gradient_under = |from: f32, to: f32| {
+            // text: `grid_bg` would erase a neighbouring cell's gradient. Conditional formats
+            // live in the effective look, not the stored style, so ask `look`.
+            let mut gradient_under = |from: f32, to: f32| {
                 let (lo, hi) = (from.min(to), from.max(to));
                 (geo.col_at(sh, lo)..=geo.col_at(sh, hi))
-                    .any(|col| col != c.col && wb.styles.get(sh.style_id(CellRef::new(c.row, col))).fill.gradient.is_some())
+                    .any(|col| col != c.col && look(wb, si, sh, CellRef::new(c.row, col), cf).0.gradient.is_some())
             };
             if lk.fill.is_none() && lk.gradient.is_none() && !gradient_under(clip.left(), rect.left()) && !gradient_under(rect.right(), clip.right())
             {
