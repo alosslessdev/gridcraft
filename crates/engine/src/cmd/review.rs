@@ -419,9 +419,17 @@ struct SheetPerformance {
 }
 
 /// The cells Excel's Check Performance can remove: no value, no formula, but a stored non-default
-/// style. Notes and comments live outside the cell and never make a cell optimizable.
+/// style. Notes and comments live outside the cell and never make a cell optimizable, and neither
+/// does a dynamic-array spill: formatting a range over a spilled `=SEQUENCE(3)` stores empty cells
+/// under the spill, whose displayed values are the spilled results, so removing that formatting
+/// would change what the sheet shows.
 fn optimizable(sh: &gridcraft_model::Sheet, at: CellRef, cell: &gridcraft_model::Cell) -> bool {
-    sh.merge_at(at).is_none() && cell.value.is_empty() && cell.formula.is_none() && cell.style != StyleId::DEFAULT
+    sh.merge_at(at).is_none()
+        && !sh.spill.contains_key(&at)
+        && !sh.spill_ranges.values().any(|range| range.contains(at))
+        && cell.value.is_empty()
+        && cell.formula.is_none()
+        && cell.style != StyleId::DEFAULT
 }
 
 /// Excel's volatile functions. `OFFSET`, `INDIRECT`, `CELL` and `INFO` are volatile in Excel but
@@ -1010,6 +1018,36 @@ mod tests {
         s.execute("home.mergeCells", json!({"range": "A1:B1"})).unwrap();
         let r = s.execute("review.checkPerformance", json!({})).unwrap();
         assert_eq!(r["optimizableCells"], 0, "merged edge cells carry border/style state");
+    }
+
+    #[test]
+    fn check_performance_keeps_the_formatting_of_cells_that_show_a_spill() {
+        // Formatting A10:A12 over `=SEQUENCE(3)` stores empty cells under the spill: A11 and A12
+        // hold no value of their own, but they display 2 and 3. Optimizing them away turned
+        // 200.00% and 300.00% into 2 and 3.
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("cell.set", json!({"cell": "A10", "input": "=SEQUENCE(3)"})).unwrap();
+        s.execute("home.numberFormat", json!({"range": "A10:A12", "code": "0.00%"})).unwrap();
+        {
+            let d = s.doc().unwrap();
+            let sh = d.wb.active().unwrap();
+            let a11 = CellRef::parse("A11").unwrap();
+            assert!(sh.cell(a11).is_some_and(|cell| cell.value.is_empty() && cell.formula.is_none()), "the format stores an empty cell");
+            assert_eq!(sh.value(a11), gridcraft_core::Value::Number(2.0));
+            assert_eq!(crate::display::cell_text(&d.wb, sh, a11), "200.00%");
+        }
+        let r = s.execute("review.checkPerformance", json!({})).unwrap();
+        assert_eq!(r["optimizableCells"], 0, "a cell that displays a spilled value is not blank");
+        assert_eq!(r["cells"], json!([]));
+        assert_eq!(s.execute("review.optimizePerformance", json!({})).unwrap()["optimized"], 0);
+        let d = s.doc().unwrap();
+        let sh = d.wb.active().unwrap();
+        for (at, text) in [("A11", "200.00%"), ("A12", "300.00%")] {
+            let c = CellRef::parse(at).unwrap();
+            assert!(sh.cell(c).is_some_and(|cell| cell.style != StyleId::DEFAULT), "{at} keeps its number format");
+            assert_eq!(crate::display::cell_text(&d.wb, sh, c), text);
+        }
     }
 
     #[test]
