@@ -490,7 +490,9 @@ fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (
             }
         }
     }
-    let mut gradient = style.fill.gradient.clone();
+    // Move the gradient out of the copied style: `Look` owns it, so the style must not keep a
+    // second deep copy of every stop.
+    let mut gradient = style.fill.gradient.take();
     let mut fill = if gradient.is_some() {
         None
     } else {
@@ -3070,7 +3072,7 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
         Some(m) => geo.range_rect(sh, m),
         None => geo.cell_rect(sh, cell),
     };
-    let st = wb.styles.get(sh.style_id(cell)).clone();
+    let st = wb.styles.get(sh.style_id(cell));
     let size = st.font.size * 96.0 / 72.0 * geo.z;
     let font = FontId::new(size, theme::cell_family(&st.font.name, st.font.bold, st.font.italic));
     let lines = ed.text.lines().count().max(1) as f32 + if ed.text.ends_with('\n') { 1.0 } else { 0.0 };
