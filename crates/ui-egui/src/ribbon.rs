@@ -1579,6 +1579,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     // Cell Controls (Excel keeps them after Illustrations).
     let cb = big_button(ui, Icon::Checkbox, "Checkbox", "Insert checkboxes in the selected cells", false);
     cb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Checkbox"));
+    control_keytip(app, ui, &cb, "insert.checkbox");
     if cb.clicked() {
         act(app, "insert.checkbox", json!({}));
     }
