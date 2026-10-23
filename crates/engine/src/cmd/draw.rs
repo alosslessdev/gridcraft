@@ -97,16 +97,20 @@ fn stroke(s: &mut Session, p: &Json) -> Result<Json> {
         text,
         format: Default::default(),
     };
-    edit(s, |cx| {
-        cx.sheet_mut(si)?.shapes.push(shape);
-        Ok(json!({"shape": id}))
+    // Draw ▸ Ink to Shape is on: convert each completed stroke, as Excel does while the mode is
+    // on. The ink and its conversion are one edit: a stroke that isn't a shape stays ink and the
+    // command still succeeds (its result names no shape), so CLI, MCP and control callers never
+    // see a failure for a document that changed.
+    let convert = s.ink_to_shape;
+    let kind = edit(s, |cx| {
+        let sh = cx.sheet_mut(si)?;
+        sh.shapes.push(shape);
+        let idx = sh.shapes.len() - 1;
+        Ok(if convert { convert_at(sh, idx) } else { None })
     })?;
-    // Draw ▸ Ink to Shape is on: convert each completed stroke, as Excel does while the mode is on.
-    if s.ink_to_shape {
-        let kind = convert_ink(s, Some(id))?;
-        return Ok(json!({"shape": id, "kind": format!("{kind:?}")}));
-    }
-    Ok(json!({"shape": id}))
+    // A stroke that stays ink is reported as such: the command succeeded and changed the sheet.
+    let kind = kind.map_or_else(|| "Ink".to_string(), |kind| format!("{kind:?}"));
+    Ok(json!({"shape": id, "kind": kind}))
 }
 
 /// Ink width is stored in the red channel of `fill` (shapes have no width field).
@@ -145,37 +149,80 @@ fn convert_ink(s: &mut Session, id: Option<u32>) -> Result<ShapeKind> {
             None => sh.shapes.iter().rposition(|x| x.kind == ShapeKind::Ink),
         }
         .ok_or_else(|| bad("draw.inkToShape", "no ink stroke to convert"))?;
-        let ink = sh.shapes.get_mut(idx).ok_or_else(|| bad("draw.inkToShape", "gone"))?;
-        let pts = parse_points(&ink.text);
-        let Some(found) = recognise(&pts) else {
-            return Err(bad("draw.inkToShape", "the stroke is not a shape"));
-        };
-        let [_, _, bw, bh] = found.bounds();
-        let kind = match &found {
-            InkShape::Line { .. } => ShapeKind::Line,
-            InkShape::Arrow { head_at_start, .. } => {
-                if *head_at_start {
-                    ShapeKind::ArrowDouble
-                } else {
-                    ShapeKind::Arrow
-                }
-            }
-            InkShape::Rectangle { .. } => ShapeKind::Rectangle,
-            InkShape::Ellipse { .. } => ShapeKind::Ellipse,
-            InkShape::Polygon(c) => polygon_kind(c).ok_or_else(|| bad("draw.inkToShape", "the polygon has no GridCraft preset"))?,
-        };
-        // Excel's square and circle are the same presets with equal sides: take the recogniser's
-        // snapped bounds so the converted shape reads as a square/circle.
-        if matches!(kind, ShapeKind::Rectangle | ShapeKind::Ellipse) {
-            ink.anchor.width = bw.max(1.0);
-            ink.anchor.height = bh.max(1.0);
-        }
-        let color = ink.line;
-        ink.kind = kind;
-        ink.fill = if kind == ShapeKind::Line { color } else { Color::Auto };
-        ink.text = String::new();
-        Ok(kind)
+        convert_at(sh, idx).ok_or_else(|| bad("draw.inkToShape", "the stroke is not a shape"))
     })
+}
+
+/// Convert the ink stroke at `idx` in `sheet` to its preset shape, returning the kind. `None`
+/// leaves the stroke as ink when the recogniser or its polygons don't map to a preset, so callers
+/// that already changed the document can keep the stroke instead of failing.
+fn convert_at(sheet: &mut Sheet, idx: usize) -> Option<ShapeKind> {
+    let found = {
+        let ink = sheet.shapes.get(idx)?;
+        recognise(&ink_points(ink))?
+    };
+    let (kind, arrow) = match &found {
+        InkShape::Line { a, b } => {
+            // The line is the recognised chord, not the stroke's bounds (which may stray from it).
+            let (anchor, flip_h, flip_v) = segment_anchor(sheet, idx, *a, *b)?;
+            (ShapeKind::Line, Some((anchor, flip_h, flip_v)))
+        }
+        InkShape::Arrow { a, b, head_at_end, head_at_start } => {
+            // A head at the start only means the stroke was drawn tip first: the arrow points
+            // from `b` to `a`. A head at each end is Excel's double arrow.
+            let double = *head_at_end && *head_at_start;
+            let (tail, tip) = if !*head_at_end && *head_at_start { (*b, *a) } else { (*a, *b) };
+            // The box holds the shaft, not the barbs, so a horizontal stroke stays horizontal.
+            let (anchor, flip_h, flip_v) = segment_anchor(sheet, idx, tail, tip)?;
+            // The line preset runs from the box's top-left corner, so mirroring the box is what
+            // makes the arrow point back along the way it was drawn.
+            let kind = if double { ShapeKind::ArrowDouble } else { ShapeKind::Arrow };
+            (kind, Some((anchor, flip_h, flip_v)))
+        }
+        InkShape::Rectangle { .. } => (ShapeKind::Rectangle, None),
+        InkShape::Ellipse { .. } => (ShapeKind::Ellipse, None),
+        InkShape::Polygon(c) => (polygon_kind(c)?, None),
+    };
+    // Excel's square and circle are the same presets with equal sides: take the recogniser's
+    // snapped bounds (origin included, it centres a grown square) so the shape reads as one.
+    let anchor = match kind {
+        ShapeKind::Rectangle | ShapeKind::Ellipse => {
+            let [x, y, w, h] = found.bounds();
+            Some((box_anchor(sheet, idx, x, y, w.max(1.0), h.max(1.0))?, false, false))
+        }
+        _ => arrow,
+    };
+    let ink = sheet.shapes.get_mut(idx)?;
+    let color = ink.line;
+    ink.kind = kind;
+    if let Some((anchor, flip_h, flip_v)) = anchor {
+        ink.anchor = anchor;
+        ink.format.flip_h = flip_h;
+        ink.format.flip_v = flip_v;
+    }
+    ink.fill = if kind == ShapeKind::Line { color } else { Color::Auto };
+    ink.text = String::new();
+    Some(kind)
+}
+
+/// The anchor of a box `w` × `h` at `x, y` (ink-local points), moved from the stroke's own box
+/// and given a cell and offsets for its new origin.
+fn box_anchor(sheet: &Sheet, idx: usize, x: f32, y: f32, w: f32, h: f32) -> Option<Anchor> {
+    let base = &sheet.shapes.get(idx)?.anchor;
+    let x0 = sheet.col_left(base.cell.col) + base.dx as f64 + x as f64;
+    let y0 = sheet.row_top(base.cell.row) + base.dy as f64 + y as f64;
+    let cell = CellRef::new(sheet.row_at(y0), sheet.col_at(x0));
+    Some(Anchor { cell, dx: (x0 - sheet.col_left(cell.col)) as f32, dy: (y0 - sheet.row_top(cell.row)) as f32, width: w, height: h, mode: base.mode })
+}
+
+/// The anchor for a segment from `tail` to `tip` (ink-local points): the box between the two
+/// ends, moved from the stroke's own box. Line and arrow geometry is that segment, not the
+/// stroke's bounds (which include a line's stray points and an arrow's barbs). The flips say
+/// which diagonal of the box the segment takes, so the renderer keeps its slope and direction.
+fn segment_anchor(sheet: &Sheet, idx: usize, tail: [f32; 2], tip: [f32; 2]) -> Option<(Anchor, bool, bool)> {
+    let anchor =
+        box_anchor(sheet, idx, tail[0].min(tip[0]), tail[1].min(tip[1]), (tip[0] - tail[0]).abs().max(1.0), (tip[1] - tail[1]).abs().max(1.0))?;
+    Some((anchor, tip[0] < tail[0], tip[1] < tail[1]))
 }
 
 /// Map a recognised polygon onto GridCraft's preset shapes: triangles and quads use the same
@@ -184,7 +231,7 @@ fn convert_ink(s: &mut Session, id: Option<u32>) -> Result<ShapeKind> {
 fn polygon_kind(c: &[[f32; 2]]) -> Option<ShapeKind> {
     match c.len() {
         3 => Some(triangle_kind(c)),
-        4 => Some(quad_kind(c)),
+        4 => quad_kind(c),
         5 => Some(ShapeKind::Pentagon),
         6 => Some(ShapeKind::Hexagon),
         _ => None,
@@ -203,9 +250,9 @@ fn triangle_kind(p: &[[f32; 2]]) -> ShapeKind {
     if (a * a + b * b - c * c).abs() < 0.08 * c * c { ShapeKind::RightTriangle } else { ShapeKind::Triangle }
 }
 
-fn quad_kind(p: &[[f32; 2]]) -> ShapeKind {
+fn quad_kind(p: &[[f32; 2]]) -> Option<ShapeKind> {
     if p.len() != 4 {
-        return ShapeKind::Rectangle;
+        return None;
     }
     let edge = |i: usize| sub(p[(i + 1) % 4], p[i]);
     let e = [edge(0), edge(1), edge(2), edge(3)];
@@ -213,20 +260,17 @@ fn quad_kind(p: &[[f32; 2]]) -> ShapeKind {
         let (na, nb) = (norm(a), norm(b));
         na > 0.0 && nb > 0.0 && (a[0] * b[0] + a[1] * b[1]).abs() / (na * nb) > 0.94
     };
-    let square = |a: [f32; 2], b: [f32; 2]| {
-        let (na, nb) = (norm(a), norm(b));
-        na > 0.0 && nb > 0.0 && (a[0] * b[0] + a[1] * b[1]).abs() / (na * nb) < 0.25
-    };
-    if square(e[0], e[1]) && square(e[1], e[2]) && square(e[2], e[3]) && square(e[3], e[0]) {
-        return ShapeKind::Rectangle;
-    }
     let (p02, p13) = (parallel(e[0], e[2]), parallel(e[1], e[3]));
     if p02 && p13 {
+        // A parallelogram with four equal sides is a diamond, including a square standing on its
+        // corner (the recogniser returns upright squares as rectangles, so they never get here).
         let sides = [norm(e[0]), norm(e[1]), norm(e[2]), norm(e[3])];
         let mean = sides.iter().sum::<f32>() / 4.0;
-        return if mean > 0.0 && sides.iter().all(|s| (s - mean).abs() < 0.08 * mean) { ShapeKind::Diamond } else { ShapeKind::Parallelogram };
+        return Some(if mean > 0.0 && sides.iter().all(|s| (s - mean).abs() < 0.08 * mean) { ShapeKind::Diamond } else { ShapeKind::Parallelogram });
     }
-    if p02 || p13 { ShapeKind::Trapezoid } else { ShapeKind::Rectangle }
+    // One pair of parallel sides is a trapezoid; an irregular quadrilateral has no preset and
+    // stays ink rather than becoming an upright rectangle that drops its corners.
+    if p02 || p13 { Some(ShapeKind::Trapezoid) } else { None }
 }
 
 fn dist(a: [f32; 2], b: [f32; 2]) -> f32 {

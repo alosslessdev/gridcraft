@@ -200,6 +200,7 @@ fn read_shape(obj: &El, anchor: Anchor) -> Option<Shape> {
     if let Some(shape) = ink::read(obj, anchor) {
         return Some(shape);
     }
+    let xf = sp.child("xfrm");
     let prst = sp.child("prstGeom").and_then(|g| g.attr("prst")).unwrap_or("rect");
     let tx_box = obj.path(&["nvSpPr", "cNvSpPr"]).is_some_and(|c| c.flag("txBox", false));
     let ln = sp.child("ln");
@@ -231,6 +232,8 @@ fn read_shape(obj: &El, anchor: Anchor) -> Option<Shape> {
         .unwrap_or_default();
     let mut format = read_text_format(obj.child("txBody"));
     format.no_line = ln.is_some_and(|l| l.child("noFill").is_some());
+    format.flip_h = xf.is_some_and(|x| x.flag("flipH", false));
+    format.flip_v = xf.is_some_and(|x| x.flag("flipV", false));
     Some(Shape { id: 0, kind, anchor, fill, line, text, format })
 }
 
@@ -305,8 +308,14 @@ fn anchor_open(sheet: &Sheet, a: &Anchor) -> (String, &'static str) {
 }
 
 fn xfrm(a: &Anchor, tag: &str) -> String {
+    xfrm_with(a, tag, false, false)
+}
+
+/// A shape's transform, mirrored inside its box when the shape is flipped (`a:xfrm flipH`/`flipV`).
+fn xfrm_with(a: &Anchor, tag: &str, flip_h: bool, flip_v: bool) -> String {
     let e = |v: f32| ((v.max(0.0) as f64) * EMU_PER_PX).round() as i64;
-    format!("<{tag}><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{}\" cy=\"{}\"/></{tag}>", e(a.width), e(a.height))
+    let (h, v) = (if flip_h { " flipH=\"1\"" } else { "" }, if flip_v { " flipV=\"1\"" } else { "" });
+    format!("<{tag}{h}{v}><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{}\" cy=\"{}\"/></{tag}>", e(a.width), e(a.height))
 }
 
 pub fn srgb(c: &Color, theme: &Theme) -> Option<String> {
@@ -399,7 +408,7 @@ pub fn write_drawing(sheet: &Sheet, theme: &Theme, objs: &[Obj<'_>]) -> String {
                     "<xdr:sp macro=\"\" textlink=\"\"><xdr:nvSpPr><xdr:cNvPr id=\"{id}\" name=\"Shape {}\"/><xdr:cNvSpPr{}/></xdr:nvSpPr><xdr:spPr>{}<a:prstGeom prst=\"{prst}\"><a:avLst/></a:prstGeom>",
                     id - 1,
                     if tx { " txBox=\"1\"" } else { "" },
-                    xfrm(&sh.anchor, "a:xfrm")
+                    xfrm_with(&sh.anchor, "a:xfrm", sh.format.flip_h, sh.format.flip_v)
                 );
                 if let Some(c) = srgb(&sh.fill, theme) {
                     let _ = write!(s, "<a:solidFill>{c}</a:solidFill>");

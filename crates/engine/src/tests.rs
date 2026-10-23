@@ -3167,6 +3167,65 @@ fn ink_to_shape_mode_converts_every_stroke_and_snaps_squares() {
 }
 
 #[test]
+fn ink_to_shape_keeps_an_arrow_pointing_the_way_it_was_drawn() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    // A shaft from right to left and two barbs at the left-hand tip.
+    let r = s.execute("draw.stroke", json!({"points": [[200, 100], [160, 100], [120, 100], [100, 100], [120, 108], [101, 100], [120, 92]]})).unwrap();
+    assert_eq!(r["kind"], "Arrow");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Arrow);
+    assert!(sh.format.flip_h, "a right-to-left arrow must point left");
+    assert!(!sh.format.flip_v);
+    // The box is the shaft's, not the barbs': a horizontal stroke stays horizontal.
+    assert!((sh.anchor.width - 100.0).abs() < 0.5, "{:?}", sh.anchor);
+    assert!(sh.anchor.height <= 1.0, "{:?}", sh.anchor);
+    // Drawn left to right, the same stroke points right.
+    let r = s.execute("draw.stroke", json!({"points": [[100, 100], [140, 100], [180, 100], [200, 100], [180, 108], [199, 100], [180, 92]]})).unwrap();
+    assert_eq!(r["kind"], "Arrow");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[1].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Arrow);
+    assert!(!sh.format.flip_h);
+    assert!(!sh.format.flip_v);
+}
+
+#[test]
+fn ink_to_shape_maps_a_square_standing_on_its_corner_to_a_diamond() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    let pts: Vec<[f64; 2]> = vec![
+        [150.0, 100.0],
+        [175.0, 125.0],
+        [200.0, 150.0],
+        [175.0, 175.0],
+        [150.0, 200.0],
+        [125.0, 175.0],
+        [100.0, 150.0],
+        [125.0, 125.0],
+        [150.0, 100.0],
+    ];
+    let r = s.execute("draw.stroke", json!({"points": pts})).unwrap();
+    assert_eq!(r["kind"], "Diamond");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Diamond);
+}
+
+#[test]
+fn ink_to_shape_leaves_an_unrecognised_stroke_as_ink_and_draw_stroke_succeeds() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    let r = s.execute("draw.stroke", json!({"points": [[10, 10], [60, 40], [110, 10], [160, 40], [210, 10]]})).unwrap();
+    assert_eq!(r["kind"], "Ink", "the stroke stays ink");
+    assert_eq!(r["shape"], 1);
+    let sheet = s.doc().unwrap().wb.active().unwrap().clone();
+    assert_eq!(sheet.shapes.len(), 1);
+    assert_eq!(sheet.shapes[0].kind, gridcraft_model::ShapeKind::Ink);
+    // The ink and the command share one undo step, so undo removes what the result reported.
+    s.execute("edit.undo", json!({})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().shapes.is_empty());
+}
+
+#[test]
 fn xlsb_import_keeps_cached_values_and_reports_limits() {
     let bytes = xlsb_fixture();
     assert_eq!(gridcraft_xlsx::sniff(&bytes), gridcraft_xlsx::Format::Xlsb);
