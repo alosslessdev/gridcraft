@@ -2146,9 +2146,10 @@ fn colour_scale_editor(ui: &mut egui::Ui, d: &mut Dialog, lang: crate::i18n::Lan
                 }
                 "formula" => {
                     let mut f = obj.get("value").and_then(Json::as_str).unwrap_or("").to_string();
-                    if ui.add(egui::TextEdit::singleline(&mut f).desired_width(120.0).hint_text(lang.tr("Formula"))).changed() {
-                        obj.insert("value".into(), json!(f));
-                    }
+                    ui.add(egui::TextEdit::singleline(&mut f).desired_width(120.0).hint_text(lang.tr("Formula")));
+                    // Store what the field shows as a string even when it was not edited: a
+                    // stop switched from Number still holds that number, which is no formula.
+                    obj.insert("value".into(), json!(f));
                 }
                 _ => {
                     let mut n = obj.get("value").and_then(Json::as_f64).unwrap_or(0.0);
@@ -2221,7 +2222,14 @@ fn new_formatting_rule(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, op
     let supported = match rule_type.as_str() {
         "allCells" => {
             colour_scale_editor(ui, d, lang);
-            true
+            // A formula stop needs a formula: one whose value is missing, not a string, or
+            // blank would create a rule that never applies. Other stops confirm as they are.
+            d.values.get("stops").and_then(Json::as_array).is_none_or(|stops| {
+                stops.iter().all(|s| {
+                    s.get("type").and_then(Json::as_str) != Some("formula")
+                        || s.get("value").and_then(Json::as_str).is_some_and(|f| !f.trim().is_empty())
+                })
+            })
         }
         "formula" => {
             ui.label(lang.tr("Format values where this formula is true:"));
