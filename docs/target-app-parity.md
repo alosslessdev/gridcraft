@@ -13,7 +13,7 @@ generated ribbon checklist is [`parity-checklist.md`](parity-checklist.md).
 | Number | Value | Kind |
 |---|---|---|
 | Feature breadth (weighted by use) | **~75%** | estimated from the area table below; anchored on two measurements |
-| Ribbon and menu catalog | **275 / 291 (94.5%)** | measured: `cargo xtask parity` (`crates/engine/src/catalog.rs` ∩ registered command ids) |
+| Ribbon and menu catalog | **276 / 292 (94.5%)** | measured: `cargo xtask parity` (`crates/engine/src/catalog.rs` ∩ registered command ids) |
 | Worksheet functions, by name | **513 / 523 (98.1%)** | measured: registered functions vs Microsoft's published function list (method below) |
 | Worksheet functions that do real work | **504 / 523 (96.4%)** | measured: excludes 9 stubs (7 CUBE functions, WEBSERVICE, FILTERXML) |
 | **Ready for real work** | **~50%** | estimated; written weights below (51.6 computed) |
@@ -54,7 +54,7 @@ long `.xls` track, so about half parallelizes (≈30–50 wall-clock hours with 
   COPILOT and PY: **523 functions**. Ours: every `f!(…)` spec in `crates/functions/src/*.rs` plus
   `SPECIAL_FUNCTIONS` in `crates/calc/src/eval.rs` (evaluator special forms), minus the test-only
   `ADD2`: **505**, all of them Excel names.
-- **Ribbon catalog:** `crates/engine/src/catalog.rs` (291 unique ids across 15 tabs) against the
+- **Ribbon catalog:** `crates/engine/src/catalog.rs` (292 unique ids across 15 tabs) against the
   313 command ids registered in `crates/engine/src/cmd/*.rs`, recomputed from source by script and
   identical to the committed `parity-checklist.md`. The catalog is our own transcription of
   Excel's main ribbon tabs; it leaves out most contextual tabs (Picture Format, Shape Format,
@@ -334,7 +334,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-21 | minor | Catalog 274 → 275 / 290 → 291: Table Design Filter Button checkbox and Header Row toggle (#1655) |
+| 2026-10-21 | minor | Catalog 275 → 276 / 291 → 292: Table Design Filter Button checkbox and Header Row toggle (#1655) |
 | 2026-10-21 | minor | Page Setup paper sizes: `B4`/`B5`/`B6` are the JIS sizes Japanese Excel uses (ISO B4/B5/B6 by name), and Japanese Postcard, Japanese Double Postcard, the chou/kaku envelopes and A6 are added; PDF MediaBox and `file.print` follow, and the Size menu lists them |
 | 2026-10-18 | trivial | Stale chart notes: all chart kinds survive XLSX round-trip (PRs #158, #161) and trendlines landed |
 | 2026-10-16 | minor | Advanced Filter copy-to clears only its actual output and rejects overflow without changing cells (#1031) |
