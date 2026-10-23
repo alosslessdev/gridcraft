@@ -1733,6 +1733,18 @@ fn table_unlink_clears_a_lone_unique_name() {
     assert_eq!(v(&s, "B2"), Value::Number(2.0), "the data stays");
 
     let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    // The reader drops a standalone `connectionId`, so check the written part itself: a writer
+    // regression that leaves any external metadata in must fail here, not only in the round-trip.
+    let bytes = crate::io::base64_decode(r["base64"].as_str().unwrap()).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut xml = String::new();
+    std::io::Read::read_to_string(&mut zip.by_name("xl/tables/table1.xml").unwrap(), &mut xml).unwrap();
+    assert!(xml.contains("name=\"Data\"") && xml.contains("ref=\"A1:B2\""), "the table itself is still written: {xml}");
+    assert!(!xml.contains("tableType="), "no tableType is written: {xml}");
+    assert!(!xml.contains("connectionId="), "no connectionId is written: {xml}");
+    assert!(!xml.contains("<xmlColumnPr"), "no xmlColumnPr is written: {xml}");
+    assert!(!xml.contains("uniqueName="), "no uniqueName is written: {xml}");
+
     s.execute("file.open", json!({"name": "u2.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
     let d = s.doc().unwrap();
     let t = &d.wb.active().unwrap().tables[0];
