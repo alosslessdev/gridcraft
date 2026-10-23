@@ -3094,6 +3094,18 @@ fn ink_to_shape_keeps_a_right_triangles_right_angle_corner() {
 }
 
 #[test]
+fn ink_to_shape_leaves_a_rotated_right_triangle_as_ink() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    // A right angle at (50, 50), the middle of the box's bottom edge: the axis-aligned preset
+    // cannot take that orientation, so the stroke stays ink instead of moving the corner.
+    let r = s.execute("draw.stroke", json!({"points": [[0, 0], [50, 50], [100, 0], [0, 0]]})).unwrap();
+    assert_eq!(r["kind"], "Ink");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Ink);
+}
+
+#[test]
 fn ink_to_shape_leaves_an_unrecognised_stroke_as_ink_and_draw_stroke_succeeds() {
     let mut s = s();
     s.execute("draw.inkToShape", json!({"on": true})).unwrap();
