@@ -792,7 +792,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     update_cursor(app, ui, &resp, &geo, sh);
     crate::text_box::show(app, ui, &geo, sh);
     if app.editor.as_ref().is_some_and(|e| !e.from_formula_bar) {
-        in_cell_editor(app, ui, &geo, sh, &wb);
+        in_cell_editor(app, ui, &geo, sh, &wb, &mut cf);
     }
     filter_menu(app, ui, &geo, previous_popups.0 == app.grid.filter_menu);
     list_picker(app, ui, &geo, previous_popups.1 == app.grid.list_picker);
@@ -3062,7 +3062,7 @@ fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Response, geo:
     }
 }
 
-fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, wb: &Workbook) {
+fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, wb: &Workbook, cf: &mut CfCache) {
     let Some(ed) = app.editor.as_ref() else { return };
     if ed.sheet != wb.active_sheet {
         return;
@@ -3092,11 +3092,11 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     };
     // Grows to the left on a right-to-left sheet.
     let erect = geo.mirror_rect(Rect::from_min_size(rect.min, vec2(w, h)));
-    let fill = match st.fill.pattern {
-        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
-        _ => Color32::WHITE,
-    };
-    let gradient = st.fill.gradient.clone();
+    // The editor paints the cell's effective fill, conditional formats and table styles included,
+    // and the caret contrasts with that same gradient rather than the raw style.
+    let lk = look(wb, wb.active_sheet, sh, cell, cf).0;
+    let fill = lk.fill.unwrap_or(Color32::WHITE);
+    let gradient = lk.gradient;
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
         pos2(if cell.col >= geo.fc { split.x } else { geo.cells.left() }, if cell.row >= geo.fr { split.y } else { geo.cells.top() }),
