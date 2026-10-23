@@ -1485,8 +1485,9 @@ fn pie(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx, inner: f32, nam
     }
 }
 
-/// Excel's doughnut: every series is one concentric ring, the first outermost. The hole size and
-/// first slice angle come from the chart; each ring is scaled to its own total.
+/// Excel's doughnut: every series is one concentric ring, the first series innermost (measured in
+/// Excel: ring outer radii ≈0.83, 0.92 and 1.0 of the plot radius for series 1, 2 and 3). The hole
+/// size and first slice angle come from the chart; each ring is scaled to its own total.
 fn doughnut(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
     let nser = data.series.len().min(MAX_SERIES);
     if nser == 0 {
@@ -1500,19 +1501,24 @@ fn doughnut(ctx: &mut Ctx, chart: &Chart, data: &ChartData, area: Bx) {
     let hole = f32::from(chart.hole_size.clamp(10, 90)) / 100.0;
     let ri = r * hole;
     let thick = (r - ri) / nser as f32;
-    if thick < 1.0 {
-        return;
-    }
+    // A ring thinner than a pixel would vanish. Rather than suppressing the whole chart when there
+    // are more series than the annulus has pixels, keep the outer rings at one pixel each and drop
+    // the innermost series that no longer fit: Excel's order makes the first series the innermost,
+    // so the outermost rings are the ones worth keeping.
+    let band = thick.max(1.0);
     let start = (chart.first_slice_angle % 360) as f32 * TAU / 360.0;
     let mut labels = Vec::new();
     for (si, s) in data.series.iter().take(nser).enumerate() {
+        let outer = (r - (nser - 1 - si) as f32 * band).min(r);
+        let inner = (r - (nser - si) as f32 * band).max(ri);
+        if outer - inner < 1.0 {
+            continue;
+        }
         let vals: Vec<f64> = s.values.iter().take(MAX_CATS).map(|v| v.map(f64::abs).unwrap_or(0.0)).collect();
         let total: f64 = vals.iter().sum();
         if !(total.is_finite() && total > 0.0) {
             continue;
         }
-        let outer = r - si as f32 * thick;
-        let inner = (outer - thick).max(ri);
         let f = Fmt::new(&s.number_format);
         let mut a = start;
         for (j, v) in vals.iter().enumerate() {

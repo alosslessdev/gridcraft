@@ -156,12 +156,13 @@ fn doughnut_draws_each_series_as_a_ring() {
     c.hole_size = 25;
     c.first_slice_angle = 0;
     let d = ChartData {
+        category_levels: vec![],
         palette: vec![],
         categories: ["A", "B", "C"].iter().map(|s| s.to_string()).collect(),
         series: vec![
-            series("Outer", &[1.0, 2.0, 3.0], [20, 96, 130, 255], ChartKind::Doughnut),
+            series("Inner", &[1.0, 2.0, 3.0], [20, 96, 130, 255], ChartKind::Doughnut),
             series("Middle", &[3.0, 2.0, 1.0], [221, 132, 82, 255], ChartKind::Doughnut),
-            series("Inner", &[1.0, 1.0, 1.0], [89, 161, 79, 255], ChartKind::Doughnut),
+            series("Outer", &[1.0, 1.0, 1.0], [89, 161, 79, 255], ChartKind::Doughnut),
         ],
     };
     let prims = render(&c, &d, 640.0, 400.0, &ApproxMeasure);
@@ -173,9 +174,57 @@ fn doughnut_draws_each_series_as_a_ring() {
         })
         .collect();
     assert_eq!(wedges.len(), 9, "three rings of three slices");
-    // The first series is outermost (Excel's order); the hole is 25% of the radius.
-    assert!(wedges[0].0 > wedges[3].0 && wedges[3].0 > wedges[6].0, "{wedges:?}");
-    assert!(wedges[6].1 > 0.0, "hole: {wedges:?}");
+    // Excel draws the first series as the innermost ring; the hole is 25% of the radius.
+    assert!(wedges[0].0 < wedges[3].0 && wedges[3].0 < wedges[6].0, "{wedges:?}");
+    assert!(wedges[0].1 > 0.0, "hole: {wedges:?}");
+}
+
+#[test]
+fn doughnut_with_many_series_still_draws_the_outer_rings() {
+    let mut c = chart(ChartKind::Doughnut);
+    c.title = None;
+    c.legend = LegendPos::None;
+    c.data_labels = false;
+    c.hole_size = 75;
+    // The annulus is a few dozen pixels tall and there are far more series than pixels, so every
+    // ring is thinner than 1 px. The chart used to draw nothing at all.
+    let many = ChartData {
+        category_levels: vec![],
+        palette: vec![],
+        categories: ["A", "B"].iter().map(|s| s.to_string()).collect(),
+        series: (0..255).map(|i| series(&format!("S{i}"), &[1.0, 1.0], [20, 96, 130, 255], ChartKind::Doughnut)).collect(),
+    };
+    let single = ChartData {
+        category_levels: vec![],
+        palette: vec![],
+        categories: ["A", "B"].iter().map(|s| s.to_string()).collect(),
+        // Two series, so the title fallback (a lone series names the chart) does not shrink the plot.
+        series: vec![
+            series("Only", &[1.0, 1.0], [20, 96, 130, 255], ChartKind::Doughnut),
+            series("Other", &[1.0, 1.0], [221, 132, 82, 255], ChartKind::Doughnut),
+        ],
+    };
+    let (w, h) = (640.0, 400.0);
+    let radii = |d: &ChartData| -> Vec<f32> {
+        render(&c, d, w, h, &ApproxMeasure)
+            .iter()
+            .filter_map(|p| match p {
+                Prim::Wedge { r_outer, .. } => Some(*r_outer),
+                _ => None,
+            })
+            .collect()
+    };
+    let outer = radii(&many);
+    assert!(!outer.is_empty(), "a sub-pixel ring must not suppress the whole chart");
+    let mut distinct = outer.clone();
+    distinct.sort_by(f32::total_cmp);
+    distinct.dedup();
+    assert!(distinct.len() > 8, "only {} rings drawn", distinct.len());
+    assert!(distinct.len() < 255, "too many rings for the pixels available: {}", distinct.len());
+    // The outermost ring still reaches the plot radius the single-ring chart uses.
+    let r = radii(&single).into_iter().fold(0.0f32, f32::max);
+    let drawn = distinct.last().copied().unwrap_or(0.0);
+    assert!((drawn - r).abs() < 0.01, "outermost ring {drawn} of {r}");
 }
 
 #[test]
@@ -185,6 +234,7 @@ fn doughnut_first_slice_angle_rotates_the_start() {
     c.legend = LegendPos::None;
     c.first_slice_angle = 90;
     let d = ChartData {
+        category_levels: vec![],
         palette: vec![],
         categories: ["A", "B"].iter().map(|s| s.to_string()).collect(),
         series: vec![series("Only", &[1.0, 1.0], [20, 96, 130, 255], ChartKind::Doughnut)],
@@ -210,6 +260,7 @@ fn rotated_wedges_cover_each_slice_once_without_overlap() {
             c.data_labels = false;
             c.first_slice_angle = angle;
             let d = ChartData {
+                category_levels: vec![],
                 palette: vec![[230, 126, 34, 255], [39, 174, 96, 255], [142, 68, 173, 255]],
                 categories: ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect(),
                 series: vec![series("Only", &[1.0; 4], [20, 96, 130, 255], kind)],
@@ -246,6 +297,7 @@ fn doughnut_legend_names_categories_and_matches_every_ring() {
     c.legend = LegendPos::Right;
     c.first_slice_angle = 180;
     let d = ChartData {
+        category_levels: vec![],
         palette: vec![[230, 126, 34, 255], [39, 174, 96, 255], [142, 68, 173, 255]],
         categories: ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect(),
         series: vec![
