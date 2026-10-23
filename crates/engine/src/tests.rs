@@ -1789,6 +1789,42 @@ fn table_unlink_drops_the_external_binding_and_keeps_the_data() {
     assert!(e.to_string().contains("no external data"), "{e}");
 }
 
+/// A file can carry `uniqueName` on its columns without `tableType`, `connectionId` or
+/// `xmlColumnPr`; the reader keeps it, so the table is external and unlink has to clear it.
+#[test]
+fn table_unlink_clears_a_lone_unique_name() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["Item", "Qty"], ["x", 2]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:B2", "header": true, "name": "Data"})).unwrap();
+    {
+        let wb = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().wb);
+        wb.sheet_mut(0).unwrap().tables[0].columns[0].unique_name = Some("ItemID".into());
+    }
+    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].is_external());
+
+    // The binding survives the file: the writer emits the lone `uniqueName` and the reader keeps it.
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "u.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
+    assert!(s.doc().unwrap().wb.active().unwrap().tables[0].is_external());
+
+    s.execute("table.unlink", json!({"table": "Data"})).unwrap();
+    {
+        let d = s.doc().unwrap();
+        let t = &d.wb.active().unwrap().tables[0];
+        assert!(!t.is_external());
+        assert!(t.columns.iter().all(|c| c.unique_name.is_none() && c.xml.is_none()));
+        assert_eq!(t.columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Item", "Qty"]);
+    }
+    assert_eq!(v(&s, "B2"), Value::Number(2.0), "the data stays");
+
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "u2.xlsx", "base64": r["base64"].as_str().unwrap()})).unwrap();
+    let d = s.doc().unwrap();
+    let t = &d.wb.active().unwrap().tables[0];
+    assert!(!t.is_external(), "the saved table is plain");
+    assert!(t.columns.iter().all(|c| c.unique_name.is_none()), "no uniqueName is written");
+}
+
 #[test]
 fn structured_refs_to_columns_with_edge_spaces() {
     let mut s = s();
