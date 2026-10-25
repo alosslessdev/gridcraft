@@ -356,14 +356,29 @@ mod tests {
         keys.sort_unstable();
         keys.dedup();
         assert!(keys.contains(&"Gradient") && keys.contains(&"Add Stop"));
-        for language in Language::ALL {
-            if language == Language::En {
-                continue;
-            }
+        let catalogs: [(&str, fn(&str) -> Option<&'static str>); 18] = [
+            ("Spanish", es::translate),
+            ("Greek", el::translate),
+            ("Simplified Chinese", zh::translate),
+            ("Korean", ko::translate),
+            ("Russian", ru::translate),
+            ("Portuguese", pt::translate),
+            ("German", de::translate),
+            ("Czech", cs::translate),
+            ("French", fr::translate),
+            ("Serbian", sr::translate),
+            ("Japanese", ja::translate),
+            ("Turkish", tr::translate),
+            ("Polish", pl::translate),
+            ("Italian", it::translate),
+            ("Ukrainian", uk::translate),
+            ("Vietnamese", vi::translate),
+            ("Dutch", nl::translate),
+            ("Romanian", ro::translate),
+        ];
+        for (language, translate) in catalogs {
             for key in &keys {
-                let english = key.rsplit_once('|').map_or(*key, |(_, label)| label);
-                let shown = language.tr(key);
-                assert!(shown != english, "missing {}: {key}", language.code());
+                assert!(translate(key).is_some(), "missing {language}: {key}");
             }
         }
     }

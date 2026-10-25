@@ -983,6 +983,19 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "A CSV file, web page or PDF is a copy: the workbook keeps its own file." => {
             "Ένα αρχείο CSV, μια ιστοσελίδα ή ένα PDF είναι αντίγραφο: το βιβλίο εργασίας διατηρεί το δικό του αρχείο."
         }
+        "Add Stop" => "Προσθήκη σημείου",
+        "Angle" => "Γωνία",
+        "Diagonal down" => "Διαγώνια κάτω",
+        "Diagonal up" => "Διαγώνια πάνω",
+        "From center" => "Από το κέντρο",
+        "From corner" => "Από τη γωνία",
+        "Gradient" => "Διαβάθμιση",
+        "Gradient|Stop" => "Σημείο διαβάθμισης",
+        "No Color" => "Χωρίς χρώμα",
+        "No Fill" => "Χωρίς γέμισμα",
+        "No fill" => "Χωρίς γέμισμα",
+        "Path" => "Διαδρομή",
+        "Solid" => "Συμπαγές",
         _ => return None,
     })
 }
