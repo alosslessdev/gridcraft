@@ -261,6 +261,11 @@ fn dax_format_parse_and_errors() {
     assert_eq!(define.trim(), "DEFINE\n    MEASURE Sales[M] = 1\n    VAR X = 2\nEVALUATE Sales\nORDER BY\n    [M] DESC\nSTART AT 0");
     assert!(ok(&["dax", "parse", "DEFINE MEASURE Sales[M] = 1 EVALUATE Sales"]).contains("Measure"));
 
+    // `DEFINE` on its own is a valid name expression, so it must not be forced onto the query
+    // parser just because it starts with a query keyword.
+    assert_eq!(ok(&["dax", "format", "DEFINE"]).trim(), "DEFINE");
+    assert!(ok(&["dax", "parse", "DEFINE"]).contains("Name"));
+
     let o = run(&["dax", "format", "DEFINE MEASURE Sales[M] = 1"]);
     assert_eq!(o.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&o.stderr).contains("EVALUATE"));
