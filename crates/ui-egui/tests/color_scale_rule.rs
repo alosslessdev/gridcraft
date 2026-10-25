@@ -5,6 +5,7 @@ use egui_kittest::kittest::Queryable;
 use gridcraft_engine::Session;
 use gridcraft_engine::model::{CfRule, CfValueKind, Color};
 use gridcraft_ui_egui::SheetApp;
+use gridcraft_ui_egui::i18n::Language;
 use serde_json::json;
 
 fn harness() -> egui_kittest::Harness<'static, SheetApp> {
@@ -308,4 +309,24 @@ fn switching_a_numeric_stop_to_formula_needs_a_formula() {
     h.run_steps(6);
     assert!(h.state().dialog.is_none());
     assert_eq!(stops(&h), vec![(CfValueKind::Formula("$Z$1".into()), Color::Rgb(0x112233)), (CfValueKind::Max, Color::Rgb(0x778899))]);
+}
+
+#[test]
+fn the_rule_list_translates_its_edit_button() {
+    let mut h = harness();
+    h.state_mut()
+        .run(
+            "home.conditionalFormat",
+            json!({"rule": {"type": "colorScale", "stops": [
+                {"type": "min", "color": "#112233"},
+                {"type": "max", "color": "#778899"},
+            ]}}),
+        )
+        .unwrap();
+    h.state_mut().run("app.language.set", json!({"language": Language::Es.code()})).unwrap();
+    h.state_mut().open_dialog("manageRules", json!({}));
+    h.run_steps(6);
+    let edit = Language::Es.tr("Edit");
+    assert_ne!(edit, "Edit");
+    assert!(h.query_all_by_label(edit).next().is_some(), "Edit stays English");
 }

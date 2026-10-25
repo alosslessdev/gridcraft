@@ -3196,6 +3196,7 @@ fn select_data(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &
 }
 
 fn manage_rules(app: &mut SheetApp, ui: &mut egui::Ui) {
+    let lang = app.ui.language;
     let list = app.session.run("home.manageRules", json!({})).unwrap_or(Json::Null);
     let rules = list["rules"].as_array().cloned().unwrap_or_default();
     if rules.is_empty() {
@@ -3209,7 +3210,7 @@ fn manage_rules(app: &mut SheetApp, ui: &mut egui::Ui) {
                 i + 1,
                 r["ranges"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(",")).unwrap_or_default()
             ));
-            if kind.contains("ColorScale") && ui.small_button("Edit").clicked() {
+            if kind.contains("ColorScale") && ui.small_button(lang.tr("Edit")).clicked() {
                 app.open_dialog("newFormattingRule", json!({"edit": i, "rule": r["rule"].clone()}));
             }
             if ui.small_button("▲").clicked() {

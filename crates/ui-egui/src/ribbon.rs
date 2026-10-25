@@ -1417,6 +1417,7 @@ fn number_combo(app: &mut SheetApp, ui: &mut Ui, st: &Style) {
 }
 
 fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
     ui.menu_button("Highlight Cells Rules", |ui| {
         for (label, op) in [("Greater Than…", "greater"), ("Less Than…", "less"), ("Between…", "between"), ("Equal To…", "equal")] {
             if ui.button(label).clicked() {
@@ -1470,7 +1471,7 @@ fn cf_menu(app: &mut SheetApp, ui: &mut Ui) {
             }
         }
         ui.separator();
-        if ui.button("More Rules…").clicked() {
+        if ui.button(lang.tr("More Rules…")).clicked() {
             app.open_dialog("newFormattingRule", json!({"style": "3color"}));
         }
     });
@@ -2988,6 +2989,21 @@ mod ribbon_tests {
         assert_eq!(d.values.get("ruleType").and_then(serde_json::Value::as_str), Some("allCells"));
         // Formula rules stay reachable: New Rule… shows Excel's rule-type list, formula entry included.
         h.get_by_label("Use a formula to determine which cells to format");
+    }
+
+    #[test]
+    fn more_rules_follows_the_interface_language() {
+        let mut session = gridcraft_engine::Session::new();
+        session.new_workbook();
+        let mut app = SheetApp::new(session, Default::default());
+        app.run("app.language.set", serde_json::json!({"language": "es"})).unwrap();
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(900.0, 800.0)).build_ui_state(|ui, app: &mut SheetApp| cf_menu(app, ui), app);
+        h.run_steps(2);
+        h.get_by_label("Color Scales").click();
+        h.run_steps(2);
+        let more = crate::i18n::Language::Es.tr("More Rules…");
+        assert_ne!(more, "More Rules…");
+        assert!(h.query_all_by_label(more).next().is_some(), "More Rules… stays English");
     }
 }
 
