@@ -135,7 +135,7 @@ fn point_color(data: &ChartData, j: usize) -> Rgba {
 
 /// The cumulative line's colour: the second palette colour, so it stands apart from the bars.
 fn pareto_line_color(data: &ChartData) -> Rgba {
-    data.palette.get(1).copied().unwrap_or_else(|| data.series.first().map(|s| s.color).unwrap_or(TEXT))
+    data.palette.get(1).copied().or_else(|| data.series.first().map(|_| series_color(&Theme::default(), 1))).unwrap_or(TEXT)
 }
 
 fn first_len(data: &ChartData) -> usize {

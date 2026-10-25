@@ -219,7 +219,7 @@ fn pareto_secondary_axis_is_fixed_at_100_percent() {
     let line = prims
         .iter()
         .find_map(|p| match p {
-            Prim::Line { pts, color, .. } if *color == d.series[0].color && pts.len() == 5 => Some(pts.clone()),
+            Prim::Line { pts, .. } if pts.len() == 5 => Some(pts.clone()),
             _ => None,
         })
         .expect("cumulative line");
@@ -306,6 +306,34 @@ fn pareto_legend_uses_the_supplied_label() {
     let d = sample(ChartKind::Pareto);
     let entries = legend_entries_with(&c, &d, &ChartLabels { cumulative: "Kumuliert %" });
     assert!(entries.iter().any(|(name, _, sw)| name == "Kumuliert %" && *sw == Swatch::Line), "{entries:?}");
+}
+
+#[test]
+fn pareto_line_falls_back_to_the_second_theme_accent() {
+    let c = chart(ChartKind::Pareto);
+    // A resolved short palette (one series) has no second colour: the line must still stand
+    // apart from the bars instead of reusing the first series colour.
+    let d = ChartData {
+        category_levels: vec![],
+        palette: vec![],
+        categories: ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect(),
+        series: vec![series("Count", &[4.0, 3.0, 2.0, 1.0], [20, 96, 130, 255], ChartKind::Pareto)],
+    };
+    let accent = series_color(&gridcraft_model::Theme::default(), 1);
+    assert_ne!(accent, d.series[0].color);
+    let entries = legend_entries(&c, &d);
+    assert_eq!(entries.get(1).map(|e| e.1), Some(accent), "the legend swatch matches the line");
+    let lines: Vec<Rgba> = render(&c, &d, 640.0, 400.0, &ApproxMeasure)
+        .iter()
+        .filter_map(|p| match p {
+            Prim::Line { color, width, .. } if *width == 1.5 => Some(*color),
+            _ => None,
+        })
+        .collect();
+    assert!(lines.contains(&accent), "{lines:?}");
+    // A second palette colour still takes precedence.
+    let d = ChartData { palette: vec![[1, 2, 3, 255], [9, 8, 7, 255]], ..d };
+    assert_eq!(legend_entries(&c, &d).get(1).map(|e| e.1), Some([9, 8, 7, 255]));
 }
 
 #[test]
