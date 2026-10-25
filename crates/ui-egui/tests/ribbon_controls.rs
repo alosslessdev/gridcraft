@@ -220,3 +220,40 @@ fn the_insert_tab_has_one_checkbox_button() {
     click(&mut h, "Checkbox");
     assert!(h.state().message.is_none(), "{:?}", h.state().message);
 }
+
+/// Page Layout ▸ Arrange ▸ Selection Pane runs a UI command, so the button and the control
+/// channel open the same pane and neither has to write view state directly.
+#[test]
+fn the_selection_pane_opens_through_its_ui_command() {
+    let mut h = harness();
+    tab(&mut h, "Page Layout");
+    click(&mut h, "Selection Pane");
+    assert_eq!(h.state().grid.pane.as_deref(), Some("selection"), "the button opens the pane");
+    assert!(h.state().message.is_none(), "{:?}", h.state().message);
+    // The control channel (and so the CLI/MCP bridge) reaches the same command and toggles it.
+    let r = control(&mut h, "command", json!({"command": "view.selectionPane"}));
+    assert_eq!((r["ok"].as_bool(), r["result"]["on"].as_bool()), (Some(true), Some(false)), "the second call closes it");
+    assert_eq!(h.state().grid.pane, None);
+    let r = control(&mut h, "command", json!({"command": "view.selectionPane", "params": {"on": true}}));
+    assert_eq!(r["result"]["on"], true);
+    assert_eq!(h.state().grid.pane.as_deref(), Some("selection"));
+}
+
+/// An unfilled field reaches `run_or_alert` as `""` or `[]`; blank means absent, so the dialogs
+/// open instead of the command failing on an empty PivotTable name or source list.
+#[test]
+fn blank_pivot_and_consolidate_inputs_open_their_dialogs() {
+    let mut h = harness();
+    for (command, params, dialog) in [
+        ("insert.pivotChart", json!({"pivot": ""}), "pivotChart"),
+        ("data.consolidate", json!({"sources": ""}), "consolidate"),
+        ("data.consolidate", json!({"sources": []}), "consolidate"),
+    ] {
+        h.state_mut().run_or_alert(command, params);
+        h.run_steps(3);
+        assert_eq!(dialog_name(&h).as_deref(), Some(dialog), "{command} with a blank field asks for it");
+        assert!(h.state().message.is_none(), "{command} must not raise an error: {:?}", h.state().message);
+        control(&mut h, "ui.dialog.cancel", json!({}));
+        h.run_steps(2);
+    }
+}

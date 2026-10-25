@@ -98,6 +98,17 @@ fn lenient_interface_scale<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u16
     Ok(v.as_f64().and_then(clamp_interface_scale).unwrap_or(100))
 }
 
+/// Whether a command parameter is absent or blank (`null`, `""` or `[]`), as a dialog or a keytip
+/// sends a field it left empty. A blank name means the same as no name at all.
+fn blank_param(v: Option<&Json>) -> bool {
+    match v {
+        None | Some(Json::Null) => true,
+        Some(Json::String(s)) => s.trim().is_empty(),
+        Some(Json::Array(a)) => a.is_empty(),
+        _ => false,
+    }
+}
+
 impl Default for UiState {
     fn default() -> Self {
         UiState {
@@ -579,7 +590,21 @@ impl SheetApp {
         self.desktop_theme = desktop_theme::DesktopTheme::start();
     }
 
-    pub fn run_or_alert(&mut self, id: &str, params: Json) {
+    pub fn run_or_alert(&mut self, id: &str, mut params: Json) {
+        // An unfilled field reaches here as `""` or `[]`; for these two commands blank is the same
+        // as absent, so drop it and the branch below opens the dialog (or uses the active cell)
+        // instead of the command failing on an empty name.
+        let blank_key = match id {
+            "insert.pivotChart" => Some("pivot"),
+            "data.consolidate" => Some("sources"),
+            _ => None,
+        };
+        if let Some(key) = blank_key
+            && let Some(map) = params.as_object_mut()
+            && blank_param(map.get(key))
+        {
+            map.remove(key);
+        }
         // A menu/shortcut opens the settings first; the Print page's button submits explicitly.
         if id == "file.print" {
             if self.services.print_native.is_some() {
@@ -723,6 +748,14 @@ impl SheetApp {
             "view.animations" => {
                 self.ui.animations = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.animations);
                 Ok(json!({"on": self.ui.animations}))
+            }
+            "view.selectionPane" => {
+                // Page Layout › Arrange › Selection Pane. Which pane is open is view state, so it
+                // is a UI command; `arrange.selectionPane` only lists the sheet's objects.
+                let shown = self.grid.pane.as_deref() == Some("selection");
+                let on = p.get("on").and_then(Json::as_bool).unwrap_or(!shown);
+                self.grid.pane = on.then(|| "selection".to_string());
+                Ok(json!({"on": on}))
             }
             "options.autoComplete" => {
                 self.ui.autocomplete = p.get("on").and_then(Json::as_bool).unwrap_or(!self.ui.autocomplete);

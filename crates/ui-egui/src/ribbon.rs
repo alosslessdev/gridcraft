@@ -2174,7 +2174,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
         let __k = small_button(ui, Icon::Shapes, "Selection Pane", "Selection Pane", false);
         control_keytip(app, ui, &__k, "arrange.selectionPane");
         if __k.clicked() {
-            app.grid.pane = Some("selection".into());
+            act(app, "view.selectionPane", json!({}));
         }
     });
     ui.vertical(|ui| {
