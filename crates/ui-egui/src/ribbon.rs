@@ -2861,9 +2861,10 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
     // tab still fits a 1200 px window. The language's own label follows the current language so it
     // stays readable; the choices are always shown in their own script.
     ui.vertical(|ui| {
-        // Two label-and-box rows share the ribbon's height: shorter boxes keep the second one
-        // inside the card.
+        // Two label-and-box rows share the ribbon's height: shorter boxes and no gap between the
+        // rows keep the second one inside the card.
         ui.spacing_mut().interact_size.y = 20.0;
+        ui.spacing_mut().item_spacing.y = 0.0;
         let label = ui.label(egui::RichText::new(lang.tr("Interface size")).font(theme::ui_font(11.5)).color(t.text_dim));
         let current = app.ui.interface_scale;
         let text = |v: u16| if v == 100 { lang.tr("Auto").to_string() } else { format!("{v}%") };
