@@ -67,6 +67,8 @@ pub struct Dialog {
     /// used once): like Excel, Column Width opens ready to type, its value selected.
     focus_first_field: bool,
     picture_inbox: Option<crate::Inbox>,
+    /// Browser data-model picker results (name, bytes); the dialog that opened the picker owns it.
+    model_inbox: Option<crate::Inbox>,
     picture_target: Option<(u64, usize)>,
     /// The dialog this one was opened from (Name Manager › New…): it comes back when this closes.
     back: Option<Box<Dialog>>,
@@ -180,6 +182,7 @@ impl Dialog {
             show_password: false,
             focus_first_field: true,
             picture_inbox: None,
+            model_inbox: None,
             picture_target: None,
             back: None,
             focus_initialized: false,
@@ -201,6 +204,7 @@ impl Dialog {
             show_password: false,
             focus_first_field: false,
             picture_inbox: None,
+            model_inbox: None,
             picture_target: None,
             back: None,
             focus_initialized: false,
