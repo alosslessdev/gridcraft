@@ -3801,6 +3801,16 @@ mod tests {
     }
 
     #[test]
+    fn data_validation_without_a_rule_opens_on_a_blank_list() {
+        let mut session = gridcraft_engine::Session::default();
+        session.new_workbook();
+        let mut app = SheetApp::new(session, Default::default());
+        let d = Dialog::open(&mut app, "dataValidation", json!({})).unwrap();
+        assert_eq!(d.values["type"], "list");
+        assert!(d.values.get("formula1").is_none());
+    }
+
+    #[test]
     fn formula_rule_picks_references_and_keeps_the_opening_range() {
         let mut session = gridcraft_engine::Session::default();
         session.new_workbook();
