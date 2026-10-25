@@ -1773,6 +1773,26 @@ fn table_header_row_toggles_and_restores_filter_arrows() {
 }
 
 #[test]
+fn table_header_off_on_another_sheet_keeps_the_active_sheets_selection() {
+    let mut s = s();
+    s.execute("home.insertSheet", json!({"name": "Two"})).unwrap();
+    s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"]]})).unwrap();
+    s.execute("insert.table", json!({"range": "A1:A3", "header": true, "name": "T"})).unwrap();
+    // Sheet1 is active, and its selection sits on the header cell's coordinates in Sheet2.
+    s.execute("selection.set", json!({"sheet": "Sheet1", "cell": "A1"})).unwrap();
+
+    s.execute("table.headerRow", json!({"table": "T", "on": false})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.sheet(1).unwrap();
+    let t = &sh.tables[0];
+    assert!(!t.header_row, "the table on Sheet2 still loses its header row");
+    assert_eq!(t.range.a1(), "A2:A3");
+    assert_eq!(d.wb.active_sheet, 0);
+    assert_eq!(d.selection.active, CellRef::new(0, 0), "another sheet's table must not move the active sheet's selection");
+    assert_eq!(d.selection.anchor, CellRef::new(0, 0));
+}
+
+#[test]
 fn table_header_row_on_inserts_cells_when_the_row_above_is_taken() {
     let mut s = s();
     s.execute("range.setValues", json!({"range": "A1", "values": [["H"], ["a"], ["b"]]})).unwrap();

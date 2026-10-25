@@ -519,8 +519,9 @@ fn table_header(s: &mut Session, p: &Json, on: Option<bool>) -> Result<Json> {
                 sh.remove_cell(CellRef::new(old_start, c));
             }
             // The contextual tab follows an active cell: keep it inside the table when the header
-            // row it was in just disappeared.
-            if cx.sel.active.row == old_start && (c0..=c1).contains(&cx.sel.active.col) {
+            // row it was in just disappeared. `cx.sel` belongs to the active sheet, so a table on
+            // another sheet must not move it.
+            if cx.wb.active_sheet == si && cx.sel.active.row == old_start && (c0..=c1).contains(&cx.sel.active.col) {
                 let at = CellRef::new(old_start + 1, cx.sel.active.col);
                 *cx.sel = Selection { active: at, anchor: at, ranges: vec![RangeRef::new(at, at)] };
             }
