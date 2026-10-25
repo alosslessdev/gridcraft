@@ -1285,7 +1285,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui);
     // Add-ins
     let __k = big_button(ui, Icon::Theme, "Add-ins", "Add-ins", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Add-ins"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Add-ins"));
     control_keytip(app, ui, &__k, "home.addIns");
     if __k.clicked() {
         act(app, "home.addIns", json!({}));
@@ -1730,7 +1730,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
     sep(ui);
     // Cell Controls (Excel keeps them after Illustrations).
     let cb = big_button(ui, Icon::Checkbox, "Checkbox", "Insert checkboxes in the selected cells", false);
-    cb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Checkbox"));
+    cb.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Checkbox"));
     control_keytip(app, ui, &cb, "insert.checkbox");
     if cb.clicked() {
         act(app, "insert.checkbox", json!({}));
@@ -1821,7 +1821,7 @@ fn insert(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "insert.slicer", json!({}));
     }
     let __k = big_button(ui, Icon::Chart, "PivotChart", "PivotChart", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "PivotChart"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "PivotChart"));
     control_keytip(app, ui, &__k, "insert.pivotChart");
     if __k.clicked() {
         act(app, "insert.pivotChart", json!({}));
@@ -2107,7 +2107,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     ui.vertical(|ui| {
         for (label, current, key) in [("Width", fit_w, "width"), ("Height", fit_h, "height")] {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(lang.tr(label)).font(theme::ui_font(11.5)).color(t.text_dim));
+                let label_response = ui.label(egui::RichText::new(lang.tr(label)).font(theme::ui_font(11.5)).color(t.text_dim));
                 egui::ComboBox::from_id_salt(("scale_to_fit", key))
                     .width(96.0)
                     .selected_text(egui::RichText::new(pages(current)).font(theme::ui_font(12.5)))
@@ -2120,11 +2120,13 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
                                 act(app, "pageLayout.scaleToFit", p);
                             }
                         }
-                    });
+                    })
+                    .response
+                    .labelled_by(label_response.id);
             });
         }
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(lang.tr("Scale")).font(theme::ui_font(11.5)).color(t.text_dim));
+            let label = ui.label(egui::RichText::new(lang.tr("Scale")).font(theme::ui_font(11.5)).color(t.text_dim));
             let text = if fit.is_some() { lang.tr("Automatic").to_string() } else { format!("{scale}%") };
             egui::ComboBox::from_id_salt("scale_to_fit_scale")
                 .width(96.0)
@@ -2135,7 +2137,9 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
                             act(app, "pageLayout.scaleToFit", json!({"scale": v}));
                         }
                     }
-                });
+                })
+                .response
+                .labelled_by(label.id);
         });
     });
     sep(ui);
@@ -2432,7 +2436,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "data.refreshAll", json!({}));
     }
     let __k = big_button(ui, Icon::Book, "Queries &\nConnections", "Queries & Connections", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Queries & Connections"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Queries & Connections"));
     control_keytip(app, ui, &__k, "data.queriesConnections");
     if __k.clicked() {
         act(app, "data.queriesConnections", json!({}));
@@ -2489,7 +2493,7 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "edit.flashFill", json!({}));
     }
     let __k = big_button(ui, Icon::Merge, "Consolidate", "Consolidate", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Consolidate"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Consolidate"));
     control_keytip(app, ui, &__k, "data.consolidate");
     if __k.clicked() {
         act(app, "data.consolidate", json!({}));
@@ -2581,7 +2585,7 @@ fn review(app: &mut SheetApp, ui: &mut Ui) {
         app.open_dialog("spelling", json!({}));
     }
     let __k = big_button(ui, Icon::Book, "Thesaurus", "Thesaurus", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Thesaurus"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Thesaurus"));
     control_keytip(app, ui, &__k, "review.thesaurus");
     if __k.clicked() {
         act(app, "review.thesaurus", json!({}));
@@ -2691,7 +2695,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
         }
     }
     let __k = big_button(ui, Icon::Book, "Custom\nViews", "Custom Views", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Custom Views"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Custom Views"));
     control_keytip(app, ui, &__k, "view.customViews");
     if __k.clicked() {
         act(app, "view.customViews", json!({}));
@@ -2754,19 +2758,19 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
     // three window commands down a column, then Switch Windows — not seven controls in one row,
     // which pushed the rest of the tab out of view.
     let __k = big_button(ui, Icon::NewFile, "New\nWindow", "New Window", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "New Window"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "New Window"));
     control_keytip(app, ui, &__k, "view.newWindow");
     if __k.clicked() {
         act(app, "view.newWindow", json!({}));
     }
     let __k = big_button(ui, Icon::Gridlines, "Arrange\nAll", "Arrange All", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Arrange All"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Arrange All"));
     control_keytip(app, ui, &__k, "view.arrangeAll");
     if __k.clicked() {
         act(app, "view.arrangeAll", json!({}));
     }
     let fp = big_button(ui, Icon::Freeze, "Freeze\nPanes", "Freeze Panes", true);
-    fp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Freeze Panes"));
+    fp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Freeze Panes"));
     for sequence in
         keytip_table::group_extension(app.keytips.prefix().unwrap_or_default(), &["view.freezePanes", "view.freezeTopRow", "view.freezeFirstColumn"])
     {
@@ -2786,26 +2790,26 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
     });
     ui.vertical(|ui| {
         let __k = small_button(ui, Icon::PageBreak, if compact { "" } else { "Split" }, "Split", false);
-        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Split"));
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Split"));
         control_keytip(app, ui, &__k, "view.split");
         if __k.clicked() {
             act(app, "view.split", json!({}));
         }
         let __k = small_button(ui, Icon::Close, if compact { "" } else { "Hide" }, "Hide Window", false);
-        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Hide"));
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Hide"));
         control_keytip(app, ui, &__k, "view.hideWindow");
         if __k.clicked() {
             act(app, "view.hideWindow", json!({}));
         }
         let __k = small_button(ui, Icon::OpenFolder, if compact { "" } else { "Unhide" }, "Unhide Window", false);
-        __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Unhide"));
+        __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Unhide"));
         control_keytip(app, ui, &__k, "view.unhideWindow");
         if __k.clicked() {
             act(app, "view.unhideWindow", json!({}));
         }
     });
     let __k = big_button(ui, Icon::Folder, "Switch\nWindows", "Switch Windows", false);
-    __k.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Switch Windows"));
+    __k.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Switch Windows"));
     control_keytip(app, ui, &__k, "view.switchWindows");
     if __k.clicked() {
         act(app, "view.switchWindows", json!({}));
@@ -2856,7 +2860,9 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
                         act(app, "view.interfaceScale", json!({"percent": v}));
                     }
                 }
-            });
+            })
+            .response
+            .labelled_by(label.id);
         let label = ui.label(egui::RichText::new(lang.tr("Interface language")).font(theme::ui_font(11.5)).color(t.text_dim));
         egui::ComboBox::from_id_salt("ui_language")
             .width(language_w)
@@ -2874,7 +2880,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
     sep_wide(ui, break_width);
     // Macros
     let mb = big_button(ui, Icon::Script, "Macros", "Macros and scripts", true);
-    mb.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), "Macros"));
+    mb.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "Macros"));
     // WM is the menu's own badge (WMR Record Actions, WMV View Macros), so it is shown on the
     // button rather than looking up a badge for `view.macros`, which no sequence targets.
     anchor_keytip(app, ui, &mb, &["automate.recordActions", "dialog:macros"]);
