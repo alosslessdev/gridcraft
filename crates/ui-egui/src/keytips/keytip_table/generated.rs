@@ -73,7 +73,7 @@ pub const SEQUENCES: &[(&str, Entry)] = &[
     ("HFDG", Entry::Finish(Action::Dialog("goTo"))),                 // Excel: Go To
     ("HFDM", Entry::Finish(Action::Command("edit.find"))),           // Excel: Find Notes; containment(Find)
     ("HFDO", Entry::Finish(Action::Pending("home.selectObjects"))), // pending; Excel: Select Objects; Select Objects; reserved until the command lands
-    ("HFDP", Entry::Finish(Action::Command("arrange.selectionPane"))), // Excel: Selection Pane
+    ("HFDP", Entry::Finish(Action::Command("view.selectionPane"))), // Excel: Selection Pane
     ("HFDR", Entry::Finish(Action::Dialog("find"))),                // Excel: Replace; opens Find and Replace
     ("HFDS", Entry::Finish(Action::Dialog("goToSpecial"))),         // Excel: Go To Special
     ("HFF", Entry::Finish(Action::Control("home.fontName"))),       // Excel: Font Selection; opens the font dropdown

@@ -2172,7 +2172,7 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
             }
         });
         let __k = small_button(ui, Icon::Shapes, "Selection Pane", "Selection Pane", false);
-        control_keytip(app, ui, &__k, "arrange.selectionPane");
+        control_keytip(app, ui, &__k, "view.selectionPane");
         if __k.clicked() {
             act(app, "view.selectionPane", json!({}));
         }

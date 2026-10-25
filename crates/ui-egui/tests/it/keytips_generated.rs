@@ -545,7 +545,7 @@ fn keytip_hfdo_() {
 fn keytip_hfdp_() {
     let mut h = harness(blank());
     sequence(&mut h, "HFDP", false);
-    assert!(h.state().message.is_none() && h.state().toast.is_none(), "HFDP must run arrange.selectionPane cleanly");
+    assert!(h.state().message.is_none() && h.state().toast.is_none(), "HFDP must run view.selectionPane cleanly");
 }
 
 #[test]

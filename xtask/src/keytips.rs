@@ -31,6 +31,10 @@ const UI_DIALOG_COMMANDS: &[(&str, &str)] = &[
     ("view.switchWindows", "switchWindows"),
 ];
 
+/// Commands the UI implements itself, so invoking them never reaches the engine catalog.
+/// Never probed; their tests assert the command runs cleanly.
+const UI_ONLY_COMMANDS: &[&str] = &["view.selectionPane"];
+
 /// Format generated source through `rustfmt` so the checked-in file matches
 /// the emitter byte-for-byte.
 fn rustfmt(src: &str) -> Result<String, String> {
@@ -80,7 +84,7 @@ fn probe_live_commands(calls: &[(String, String)]) -> Probe {
     use gridcraft_engine::Session;
     let mut map = Probe::new();
     for (id, params) in calls {
-        if ENV_SENSITIVE.contains(&id.as_str()) || UI_DIALOG_COMMANDS.iter().any(|(c, _)| c == id) {
+        if ENV_SENSITIVE.contains(&id.as_str()) || UI_DIALOG_COMMANDS.iter().any(|(c, _)| c == id) || UI_ONLY_COMMANDS.contains(&id.as_str()) {
             continue;
         }
         let params = if params.is_empty() { serde_json::json!({}) } else { serde_json::from_str(params).unwrap_or_default() };
@@ -315,6 +319,11 @@ fn render_tests(entries: &[Entry], probe: &Probe) -> String {
                     seq = e.seq,
                 )
             }
+            "command" if UI_ONLY_COMMANDS.contains(&e.target.as_str()) => format!(
+                "sequence(&mut h, {seq:?}, false);\n    assert!(h.state().message.is_none() && h.state().toast.is_none(), \"{seq} must run {id} cleanly\");",
+                seq = e.seq,
+                id = e.target,
+            ),
             "command" => match probe.get(&e.probe_key()).copied().unwrap_or(2) {
                 0 => format!(
                     "sequence(&mut h, {seq:?}, false);\n    assert!(h.state().session.journal.iter().any(|(id, _)| id == {id:?}), \"{seq} must journal {id}\");",

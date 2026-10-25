@@ -494,7 +494,7 @@
   {
    "seq": "HFDP",
    "kind": "command",
-   "target": "arrange.selectionPane",
+   "target": "view.selectionPane",
    "excel": "Selection Pane",
    "note": ""
   },
