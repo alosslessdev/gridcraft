@@ -978,13 +978,20 @@ fn queries(s: &mut Session, _: &Json) -> Result<Json> {
 fn record(s: &mut Session, p: &Json) -> Result<Json> {
     if bool_param(p, "stop").unwrap_or(false) || s.recording.is_some() {
         let Some(start) = s.recording.take() else { return Ok(json!({"recording": false})) };
-        let cmds: Vec<Json> =
+        let mut cmds: Vec<Json> =
             s.journal.iter().skip(start).filter(|(id, _)| !id.starts_with("automate.")).map(|(id, p)| json!({"command": id, "params": p})).collect();
+        // Draw ▸ Ink to Shape is a mode, so the journal only holds it once it changes: strokes
+        // recorded while it was already on carry no step saying so, and replaying them with the
+        // mode off would leave them as ink. The script opens by turning the mode back on.
+        if s.recording_ink_to_shape {
+            cmds.insert(0, json!({"command": "draw.inkToShape", "params": {"on": true}}));
+        }
         let name = str_param(p, "name").map(str::to_string).unwrap_or_else(|| format!("Script {}", start));
         s.execute("automate.newScript", json!({"name": name, "commands": cmds}))?;
         return Ok(json!({"recording": false, "saved": name, "steps": cmds.len()}));
     }
     s.recording = Some(s.journal.len());
+    s.recording_ink_to_shape = s.ink_to_shape;
     Ok(json!({"recording": true}))
 }
 

@@ -104,7 +104,9 @@ Actions made of many commands (macros, a debugger that runs one step per call) u
   top-level command with the document, sheet and selection it ran in, without secret parameters.
   Commands run by other commands are not recorded, nor is a menu-style call that only opened a
   dialog (the dialog's confirming call is the step), and the buffer is independent of the journal
-  (Automate › Record Actions still records through the journal).
+  (Automate › Record Actions still records through the journal). Because Draw ▸ Ink to Shape is
+  state rather than a step, Record Actions started with the mode on saves that as the script's
+  first step, so the recorded strokes convert again when the script is played back.
 - **Document trust.** `DocState::trust` is `Local` for workbooks made in the session and
   `FromFile` for workbooks opened from a file. `Trust` has no default: `DocState::new` takes it,
   so every way of making a document says where its content came from. It is also `FromFile` for

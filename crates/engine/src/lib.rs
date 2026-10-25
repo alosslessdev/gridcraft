@@ -432,6 +432,10 @@ pub struct Session {
     pub hide_ruler: bool,
     /// Journal position where Automate › Record Actions started.
     pub recording: Option<usize>,
+    /// Draw ▸ Ink to Shape as it was when that recording started. The mode is state, not a step
+    /// in the journal window, so a recording begun with it on saves it as its first step and the
+    /// script's strokes convert again.
+    recording_ink_to_shape: bool,
     /// The recording buffer while a recorder runs ([`Session::start_recording`]): top-level
     /// commands with the place they ran in, kept apart from the journal.
     pub recorder: Option<record::Recorder>,

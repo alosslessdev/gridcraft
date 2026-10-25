@@ -4812,6 +4812,27 @@ fn recording_keeps_its_steps_when_the_journal_is_trimmed() {
 }
 
 #[test]
+fn recorded_strokes_replay_the_ink_to_shape_mode_they_were_drawn_with() {
+    let mut s = s();
+    // The mode is on before recording starts, so its toggle is not in the recorded window.
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    s.execute("automate.recordActions", json!({})).unwrap();
+    let pts = [[100.0, 100.0], [180.0, 100.0], [180.0, 172.0], [100.0, 172.0], [100.0, 100.0]];
+    assert_eq!(s.execute("draw.stroke", json!({"points": pts})).unwrap()["kind"], "Rectangle");
+    s.execute("automate.recordActions", json!({"stop": true, "name": "Ink"})).unwrap();
+    let script = s.doc().unwrap().wb.names.iter().find(|n| n.name == "_sc_scripts").map(|n| n.formula.clone()).unwrap();
+    assert!(script.contains("draw.inkToShape") && script.contains("draw.stroke"), "{script}");
+
+    // Playing the script back with the mode off still converts the stroke: the saved mode is
+    // restored first, so the replayed stroke is the preset shape it was recorded as.
+    s.execute("draw.inkToShape", json!({"on": false})).unwrap();
+    assert_eq!(s.execute("automate.runScript", json!({"name": "Ink"})).unwrap()["ran"], 2);
+    let sheet = s.doc().unwrap().wb.active().unwrap().clone();
+    assert_eq!(sheet.shapes.len(), 2);
+    assert_eq!(sheet.shapes[1].kind, gridcraft_model::ShapeKind::Rectangle);
+}
+
+#[test]
 fn html_export_draws_charts_as_inline_svg_with_their_text() {
     let mut s = s();
     s.execute("range.setValues", json!({"range": "A1", "values": [["Month", "Sales"], ["Jan", 5], ["Feb", 7], ["Mar", 9]]})).unwrap();
