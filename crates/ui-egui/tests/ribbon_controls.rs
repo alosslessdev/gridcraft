@@ -163,6 +163,8 @@ fn pivot_chart_asks_for_the_report_instead_of_failing() {
     assert!(h.state().dialog.is_none(), "inside a PivotTable the button charts it at once");
     assert!(h.state().message.is_none(), "{:?}", h.state().message);
     assert_eq!(h.state().session.active().and_then(|d| d.wb.active().map(|sh| sh.charts.len())), Some(1));
+    let chart = h.state().session.active().and_then(|d| d.wb.active().and_then(|sh| sh.charts.first().map(|c| c.id)));
+    assert_eq!(h.state().selected_chart, chart, "the inserted PivotChart is selected, so Chart Design applies to it");
 }
 
 /// Every control on the View tab ends inside the window with room to spare: the Window group's

@@ -3621,7 +3621,7 @@ fn custom_views(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open: &mu
         refresh = true;
     }
     if refresh {
-        d.result = Some(app.session.run("view.customViews", json!({})).unwrap_or(Json::Null));
+        d.result = Some(app.session.run("view.customViews", json!({})).unwrap_or_else(|e| json!({"error": e})));
     }
 }
 
