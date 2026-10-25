@@ -2061,7 +2061,7 @@ fn fill_tab(ui: &mut egui::Ui, fill: &mut Fill, theme: &Theme, lang: crate::i18n
             // is sorted.
             let preview = GradientFill::new(g.kind, g.stops.clone());
             let (rect, _) = ui.allocate_exact_size(vec2(240.0, 54.0), Sense::hover());
-            crate::gradient::paint_rect(ui.painter(), rect, &preview, theme);
+            crate::gradient::paint_rect(ui.painter(), rect, &preview, theme, false);
             let t = crate::theme::Tokens::get(ui.ctx());
             ui.painter().rect_stroke(rect, 0.0, Stroke::new(1.0, t.separator), StrokeKind::Inside);
             *fill = if editing {

@@ -8,7 +8,10 @@ use gridcraft_engine::model::{GradientFill, Theme};
 /// The mesh is sampled at a fixed grid. A flat triangle pair cannot represent a multi-stop
 /// gradient, and egui has no gradient shader, so a 2-D grid is the smallest form that works for
 /// both linear and path gradients.
-pub fn paint_rect(painter: &Painter, rect: Rect, gradient: &GradientFill, theme: &Theme) {
+///
+/// `mirror_x` reflects the colours across `rect`'s vertical centre line: a right-to-left sheet
+/// mirrors the grid's geometry, and the gradient's colour axis has to follow it.
+pub fn paint_rect(painter: &Painter, rect: Rect, gradient: &GradientFill, theme: &Theme, mirror_x: bool) {
     if !(rect.is_finite() && rect.is_positive()) {
         return;
     }
@@ -28,7 +31,8 @@ pub fn paint_rect(painter: &Painter, rect: Rect, gradient: &GradientFill, theme:
         for x in 0..=cols {
             let u = x as f32 / cols as f32;
             let v = y as f32 / rows as f32;
-            let Some(rgb) = gradient.sample_resolved(&stops, u as f64, v as f64) else { return };
+            let sample_u = if mirror_x { 1.0 - u } else { u };
+            let Some(rgb) = gradient.sample_resolved(&stops, sample_u as f64, v as f64) else { return };
             let pos = pos2(rect.left() + rect.width() * u, rect.top() + rect.height() * v);
             mesh.colored_vertex(pos, Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
         }

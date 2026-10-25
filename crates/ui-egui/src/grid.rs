@@ -1204,7 +1204,7 @@ pub(crate) fn paint_quadrant(
         };
         let (lk, cfl) = look(wb, si, sh, anchor, cf);
         if let Some(g) = &lk.gradient {
-            crate::gradient::paint_rect(p, rect, g, &wb.theme);
+            crate::gradient::paint_rect(p, rect, g, &wb.theme, geo.rtl);
         } else if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
@@ -3268,7 +3268,7 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let clip = if on_screen { ui.clip_rect().intersect(screen_quadrant) } else { Rect::NOTHING };
     let painter = ui.painter().with_clip_rect(clip);
     if let Some(g) = &gradient {
-        crate::gradient::paint_rect(&painter, erect, g, &wb.theme);
+        crate::gradient::paint_rect(&painter, erect, g, &wb.theme, geo.rtl);
     } else {
         painter.rect_filled(erect, 0.0, fill);
     }
@@ -3283,6 +3283,9 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let caret_line = before_caret.matches('\n').count();
     let caret_x = ui.painter().layout_no_wrap(before_caret.rsplit('\n').next().unwrap_or("").to_string(), font.clone(), Color32::BLACK).size().x;
     let u = ((caret_x + 2.0) / erect.width().max(1.0)).clamp(0.0, 1.0) as f64;
+    // The editor paints the gradient with its colours mirrored on a right-to-left sheet, so the
+    // caret samples the same reflected colour axis.
+    let u = if geo.rtl { 1.0 - u } else { u };
     let v = if wrap { ((caret_line as f32 + 0.5) / lines.max(1.0)).clamp(0.0, 1.0) as f64 } else { 0.5 };
     let caret_bg = gradient.as_ref().and_then(|g| g.sample(u, v, &wb.theme)).map_or(fill, |rgb| Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
     child.visuals_mut().text_cursor.stroke.color = ink_on(caret_bg);
