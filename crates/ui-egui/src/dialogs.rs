@@ -3644,21 +3644,26 @@ fn pivot_chart(app: &SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut 
         return;
     }
     ui.label("PivotTable:");
-    let mut pick = d.values.get("pivot").and_then(Json::as_str).unwrap_or("").to_string();
-    // The report at the active cell is preselected; otherwise the first one, so OK always names one.
-    let known = pivots.iter().any(|p| p.get("name").and_then(Json::as_str) == Some(pick.as_str()));
-    if !known {
-        pick = pivots.first().and_then(|p| p.get("name")).and_then(Json::as_str).unwrap_or("").to_string();
-    }
+    let selected = d.values.get("pivot").cloned().unwrap_or(Json::Null);
+    // The report at the active cell is preselected; otherwise the first one, so OK always targets
+    // one. The selection is submitted as the row's `id`: the engine reads a string `pivot` as a
+    // name or a cell, so a report named `A1` would be taken for a cell reference.
+    let mut picked = pivots
+        .iter()
+        .find(|p| selected.as_str() == p.get("name").and_then(Json::as_str) || p.get("id").is_some_and(|id| id == &selected))
+        .or_else(|| pivots.first())
+        .and_then(|p| p.get("id").cloned());
     for p in &pivots {
         let name = p.get("name").and_then(Json::as_str).unwrap_or("");
         let sheet = p.get("sheet").and_then(Json::as_str).unwrap_or("");
         let anchor = p.get("anchor").and_then(Json::as_str).unwrap_or("");
-        if ui.radio(pick == name, format!("{name} ({sheet}!{anchor})")).clicked() {
-            pick = name.to_string();
+        if ui.radio(picked.as_ref() == p.get("id"), format!("{name} ({sheet}!{anchor})")).clicked() {
+            picked = p.get("id").cloned();
         }
     }
-    d.values.insert("pivot".into(), json!(pick));
+    if let Some(id) = picked {
+        d.values.insert("pivot".into(), id);
+    }
     ui.horizontal(|ui| {
         ui.label("Chart type:");
         let mut kind = d.values.get("type").and_then(Json::as_str).unwrap_or("column").to_string();

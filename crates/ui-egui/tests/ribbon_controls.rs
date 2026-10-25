@@ -167,6 +167,32 @@ fn pivot_chart_asks_for_the_report_instead_of_failing() {
     assert_eq!(h.state().selected_chart, chart, "the inserted PivotChart is selected, so Chart Design applies to it");
 }
 
+/// A report whose name reads as a cell (`A1`) is submitted by id, so the dialog charts it instead
+/// of the engine parsing the name as a cell reference and failing.
+#[test]
+fn pivot_chart_dialog_targets_a_report_named_like_a_cell() {
+    let mut h = harness();
+    run(&mut h, "range.setValues", json!({"range": "A1", "values": [["Region", "Sales"], ["East", 10], ["West", 20]]}));
+    run(
+        &mut h,
+        "insert.pivotTable",
+        json!({"source": "Sheet1!A1:B3", "rows": ["Region"], "values": ["Sales"], "destination": "Sheet1!D1", "name": "A1"}),
+    );
+    run(&mut h, "selection.set", json!({"cell": "H2"}));
+    tab(&mut h, "Insert");
+    click(&mut h, "PivotChart");
+    assert_eq!(dialog_name(&h).as_deref(), Some("pivotChart"), "outside the report the dialog asks which one to chart");
+    assert!(
+        h.state().dialog.as_ref().and_then(|d| d.values.get("pivot")).and_then(Json::as_u64).is_some(),
+        "the selection is the report id, not its name: {:?}",
+        h.state().dialog.as_ref().and_then(|d| d.values.get("pivot"))
+    );
+    h.get_by_label_contains("OK").click();
+    h.run_steps(4);
+    assert!(h.state().message.is_none(), "{:?}", h.state().message);
+    assert_eq!(h.state().session.active().and_then(|d| d.wb.active().map(|sh| sh.charts.len())), Some(1));
+}
+
 /// Every control on the View tab ends inside the window with room to spare: the Window group's
 /// seven controls and Macros used to push the last settings boxes off the right edge. The label
 /// widths follow the font (Linux CI fonts measure ~7% wider than Windows'), so the check is a
