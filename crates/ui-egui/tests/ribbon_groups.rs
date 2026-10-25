@@ -1,6 +1,6 @@
 //! Ribbon groups: captions sit under their clusters and missing features take no space.
 
-use egui::{Event, Modifiers, PointerButton};
+use egui_kittest::kittest::Queryable as _;
 use gridcraft_engine::Session;
 use gridcraft_ui_egui::SheetApp;
 
@@ -44,26 +44,17 @@ fn captions_sit_under_the_controls_and_groups_pack_left() {
 }
 
 #[test]
-fn a_launcher_opens_its_groups_dialog() {
+fn a_launcher_is_named_and_opens_its_groups_dialog() {
     let mut s = Session::new();
     s.new_workbook();
     let mut h = harness(s);
     let font = caption(&h, "Font").expect("the Font caption");
-    // The launcher is a small box in the group's bottom-right corner: walk the caption band to
-    // its right until one responds (the band carries no other clickable control).
-    let mut opened = false;
-    let y = font.center().y;
-    let mut x = font.center().x;
-    while x < font.center().x + 600.0 && !opened {
-        let p = egui::pos2(x, y);
-        h.input_mut().events.extend([
-            Event::PointerMoved(p),
-            Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE },
-            Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE },
-        ]);
-        h.run_steps(2);
-        opened = h.state().dialog.is_some();
-        x += 6.0;
-    }
-    assert!(opened, "a dialog launcher in the caption band opens a dialog");
+    // The launcher is painted, so its AccessKit name is all a screen reader gets; it sits in the
+    // caption band's bottom-right corner, clear of the centred caption text.
+    let launcher = h.get_by_role_and_label(egui::accesskit::Role::Button, "Font dialog launcher");
+    let rect = launcher.rect();
+    assert!(rect.left() > font.right(), "the launcher clears the caption: caption {font:?}, launcher {rect:?}");
+    launcher.click();
+    h.run_steps(2);
+    assert!(h.state().dialog.is_some(), "a dialog launcher in the caption band opens a dialog");
 }

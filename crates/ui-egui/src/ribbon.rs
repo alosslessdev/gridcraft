@@ -481,6 +481,16 @@ fn sep(ui: &mut Ui) {
 /// the ribbon card so every group's caption lines up along the bottom, as in Excel.
 const GROUP_CONTROLS_H: f32 = 72.0;
 const GROUP_CAPTION_H: f32 = 16.0;
+/// Width of the dialog launcher's box in the caption band's bottom-right corner.
+const GROUP_LAUNCHER_W: f32 = 15.0;
+
+/// A group's width: its controls' width, or its caption's plus the padding the caption band
+/// needs. A launcher sits over the band's right-hand corner, and the caption is centred, so with
+/// one the caption needs the launcher's width clear on each side too (#1795).
+fn group_width(controls_w: f32, caption_w: f32, launcher: bool) -> f32 {
+    let pad = if launcher { 2.0 * GROUP_LAUNCHER_W } else { 12.0 };
+    controls_w.max(caption_w + pad)
+}
 
 /// An Excel-style ribbon group: the controls packed top-left over a caption band carrying the
 /// group's name, with Excel's dialog launcher in the bottom-right corner where Excel has one.
@@ -493,16 +503,20 @@ fn group(app: &mut SheetApp, ui: &mut Ui, title: &str, launcher: Option<(&str, s
         if row.response.rect.height() < GROUP_CONTROLS_H {
             ui.add_space(GROUP_CONTROLS_H - row.response.rect.height());
         }
-        // The caption sits centred under the controls; a caption wider than them widens the group.
+        // The caption sits centred under the controls; a caption wider than them widens the group,
+        // leaving the launcher's corner clear.
         let label = app.ui.language.tr(title).to_string();
         let galley = ui.painter().layout_no_wrap(label, theme::ui_font(11.0), t.text_dim);
-        let w = row.response.rect.width().max(galley.size().x + 12.0);
+        let w = group_width(row.response.rect.width(), galley.size().x, launcher.is_some());
         let (cap, _) = ui.allocate_exact_size(vec2(w, GROUP_CAPTION_H), Sense::hover());
         ui.painter().galley(cap.center() - galley.size() / 2.0, galley, t.text_dim);
         if let Some((dialog, params)) = launcher {
             // Excel's dialog launcher: a small box with an arrow, in the group's bottom-right.
-            let lr = Rect::from_min_size(pos2(cap.right() - 15.0, cap.center().y - 7.5), vec2(15.0, 15.0));
+            let lr = Rect::from_min_size(pos2(cap.right() - GROUP_LAUNCHER_W, cap.center().y - 7.5), vec2(GROUP_LAUNCHER_W, GROUP_LAUNCHER_W));
             let resp = ui.interact(lr, ui.scope_id().with(("group_launcher", title)), Sense::click());
+            // A painted box carries no label of its own, so name it for screen readers.
+            let name = format!("{} dialog launcher", app.ui.language.tr(title));
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), name.as_str()));
             if resp.hovered() {
                 ui.painter().rect_filled(lr.shrink(1.0), 3.0, t.hover);
             }
@@ -2798,7 +2812,6 @@ fn view(app: &mut SheetApp, ui: &mut Ui) {
 }
 
 fn automate(app: &mut SheetApp, ui: &mut Ui) {
-    sep(ui);
     // GridCraft (agent and session tools with no Excel equivalent).
     group(app, ui, "GridCraft", None, |app, ui| {
         if big_button(ui, Icon::Script, "Macros", "Macros and scripts in this workbook (Alt+F8)", false).clicked() {
@@ -3127,6 +3140,27 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
     if let Some((id, p)) = id {
         app.run_or_alert(id, p);
         app.grid.ensure_visible = true;
+    }
+}
+
+#[cfg(test)]
+mod group_width_tests {
+    use super::*;
+
+    #[test]
+    fn a_launcher_leaves_its_corner_clear_of_the_caption() {
+        // A caption wider than the controls is centred, so the launcher's width must stay free on
+        // each side of it; otherwise the box covers the text (#1795).
+        let w = group_width(40.0, 100.0, true);
+        assert_eq!(w, 100.0 + 2.0 * GROUP_LAUNCHER_W);
+        assert_eq!((w - 100.0) / 2.0, GROUP_LAUNCHER_W, "the caption clears the launcher");
+        // Without a launcher the band keeps its smaller padding.
+        assert_eq!(group_width(40.0, 100.0, false), 112.0);
+        // Controls wider than the caption still set the width, and the centred caption clears
+        // the launcher's corner there too.
+        let w = group_width(200.0, 100.0, true);
+        assert_eq!(w, 200.0);
+        assert!(w / 2.0 + 50.0 <= w - GROUP_LAUNCHER_W);
     }
 }
 
