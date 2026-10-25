@@ -2131,7 +2131,9 @@ fn page_layout(app: &mut SheetApp, ui: &mut Ui) {
     });
     sep(ui);
     // Sheet Options
-    group(app, ui, "Sheet Options", Some(("pageSetup", json!({"tab": "Sheet"}))), |app, ui| {
+    // No launcher: Excel opens Page Setup on its Sheet tab here, but the pageSetup dialog only has
+    // the margins form, so the arrow would open an unrelated form. Add one with the Sheet dialog.
+    group(app, ui, "Sheet Options", None, |app, ui| {
         let sh = app
             .session
             .active()
