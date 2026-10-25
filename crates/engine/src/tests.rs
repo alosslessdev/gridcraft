@@ -3259,6 +3259,13 @@ fn ink_to_shape_keeps_only_triangles_the_preset_can_draw() {
     let r = s.execute("draw.stroke", json!({"points": [[0, 0], [100, 0], [30, 60], [0, 0]]})).unwrap();
     assert_eq!(r["kind"], "Ink");
     assert_eq!(s.doc().unwrap().wb.active().unwrap().shapes[2].kind, gridcraft_model::ShapeKind::Ink);
+    // A right isosceles triangle whose 90° apex sits on the bottom edge's midpoint is the
+    // `Triangle` preset mirrored down, not the `RightTriangle` preset: it converts rather than
+    // staying ink because its right angle is not at a box corner.
+    s.execute("draw.stroke", json!({"points": [[0, 0], [50, 50], [100, 0], [0, 0]]})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[3].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Triangle);
+    assert!(sh.format.flip_v, "the apex belongs at the bottom: {:?}", sh.format);
 }
 
 #[test]
@@ -3284,9 +3291,10 @@ fn ink_to_shape_keeps_a_right_triangles_right_angle_corner() {
 fn ink_to_shape_leaves_a_rotated_right_triangle_as_ink() {
     let mut s = s();
     s.execute("draw.inkToShape", json!({"on": true})).unwrap();
-    // A right angle at (50, 50), the middle of the box's bottom edge: the axis-aligned preset
-    // cannot take that orientation, so the stroke stays ink instead of moving the corner.
-    let r = s.execute("draw.stroke", json!({"points": [[0, 0], [50, 50], [100, 0], [0, 0]]})).unwrap();
+    // A right angle at (30, 46), inside the box's bottom edge and off its centre: no axis-aligned
+    // preset takes that orientation and it is not the centred-apex `Triangle` either, so the
+    // stroke stays ink instead of moving the corner.
+    let r = s.execute("draw.stroke", json!({"points": [[0, 0], [100, 0], [30, 46], [0, 0]]})).unwrap();
     assert_eq!(r["kind"], "Ink");
     let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
     assert_eq!(sh.kind, gridcraft_model::ShapeKind::Ink);

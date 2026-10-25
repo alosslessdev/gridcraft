@@ -263,10 +263,12 @@ fn triangle_kind(p: &[[f32; 2]]) -> Option<(ShapeKind, bool, bool)> {
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let (a, b, c) = (sorted[0], sorted[1], sorted[2]);
     // The right angle sits opposite the longest side. GridCraft's preset has it at the box's
-    // bottom-left; flips move it to the corner the stroke drew it at. A rotated right triangle
-    // has no preset orientation, so it stays ink instead of being drawn at the wrong corner.
-    if (a * a + b * b - c * c).abs() < 0.08 * c * c {
-        let (flip_h, flip_v) = right_triangle_flips(p)?;
+    // bottom-left; flips move it to the corner the stroke drew it at. A right angle that is not
+    // at a corner has no such preset orientation, so the triangle is tried against the `Triangle`
+    // preset below instead.
+    if (a * a + b * b - c * c).abs() < 0.08 * c * c
+        && let Some((flip_h, flip_v)) = right_triangle_flips(p)
+    {
         return Some((ShapeKind::RightTriangle, flip_h, flip_v));
     }
     // The `Triangle` preset is a centred apex over a base along one box edge. Only a triangle
