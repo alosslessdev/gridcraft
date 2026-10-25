@@ -683,6 +683,35 @@ fn check_performance_dialog_reports_optimizable_cells_and_goes_to_one() {
 }
 
 #[test]
+/// The pane outlives `window.activate`: when another workbook comes to the front its report, Go To
+/// and Optimize actions must describe that workbook, never the one that went behind.
+fn check_performance_follows_the_active_workbook() {
+    let mut s = blank();
+    s.execute("home.bold", json!({"range": "B2"})).unwrap();
+    let mut h = harness(s);
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    assert!(h.query_by_label("1 cells used · 1 can be optimized").is_some());
+
+    h.state_mut().run("file.new", json!({})).unwrap();
+    h.state_mut().run("home.bold", json!({"range": "C3"})).unwrap();
+    h.run_steps(2);
+    let report = h.state().dialog.as_ref().expect("the pane stays open across window switches").result.clone().unwrap();
+    assert_eq!(report["cells"][0]["cell"], "C3", "the report describes the workbook now in front");
+    assert_eq!(report["optimizableCells"].as_u64(), Some(1));
+
+    h.get_by_label("Optimize all").click();
+    h.run_steps(3);
+    assert_eq!(h.state().session.documents().len(), 2);
+    let bold = |h: &mut egui_kittest::Harness<'static, SheetApp>, doc: usize, cell: &str| {
+        h.state_mut().run("window.activate", json!({"index": doc})).unwrap();
+        h.state_mut().run("cell.get", json!({"cell": cell})).unwrap()["style"]["font"]["bold"].clone()
+    };
+    assert_eq!(bold(&mut h, 1, "C3"), json!(false), "the workbook in front was optimized");
+    assert_eq!(bold(&mut h, 0, "B2"), json!(true), "the workbook behind it keeps its formatting");
+}
+
+#[test]
 fn check_performance_dialog_says_when_there_is_nothing_to_fix() {
     let mut h = harness(blank());
     h.state_mut().open_dialog("checkPerformance", json!({}));
