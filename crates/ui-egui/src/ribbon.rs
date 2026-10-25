@@ -2365,11 +2365,6 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         if gd.clicked() {
             app.open_dialog("open", json!({}));
         }
-        let __k = small_button(ui, Icon::Filter, "Advanced", "Advanced Filter", false);
-        control_keytip(app, ui, &__k, "dialog:advancedFilter");
-        if __k.clicked() {
-            app.open_dialog("advancedFilter", json!({}));
-        }
     });
     sep(ui);
     // Sort & Filter
@@ -2406,6 +2401,11 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
             control_keytip(app, ui, &__k, "data.reapply");
             if __k.clicked() {
                 act(app, "data.reapply", json!({}));
+            }
+            let __k = small_button(ui, Icon::Filter, "Advanced", "Advanced Filter", false);
+            control_keytip(app, ui, &__k, "dialog:advancedFilter");
+            if __k.clicked() {
+                app.open_dialog("advancedFilter", json!({}));
             }
         });
     });
@@ -2466,9 +2466,6 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
         if big_button(ui, Icon::ChartLine, "Forecast\nSheet", "Forecast Sheet", false).clicked() {
             app.open_dialog("forecastSheet", json!({}));
         }
-        if small_button(ui, Icon::Settings, "Settings", "Outline Settings", false).clicked() {
-            app.open_dialog("outlineSettings", json!({}));
-        }
     });
     sep(ui);
     // Outline
@@ -2496,6 +2493,9 @@ fn data(app: &mut SheetApp, ui: &mut Ui) {
             }
             if small_button(ui, Icon::Minus, "Hide Detail", "Hide Detail", false).clicked() {
                 act(app, "data.hideDetail", json!({}));
+            }
+            if small_button(ui, Icon::Settings, "Settings", "Outline Settings", false).clicked() {
+                app.open_dialog("outlineSettings", json!({}));
             }
         });
     });
