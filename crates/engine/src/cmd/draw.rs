@@ -184,17 +184,14 @@ fn convert_at(sheet: &mut Sheet, idx: usize) -> Option<ShapeKind> {
         InkShape::Rectangle { .. } => (ShapeKind::Rectangle, None),
         InkShape::Ellipse { .. } => (ShapeKind::Ellipse, None),
         InkShape::Polygon(c) => {
-            let kind = polygon_kind(c)?;
-            if kind == ShapeKind::RightTriangle {
-                // GridCraft's preset has its right angle at the box's bottom-left; flips move it
-                // to the corner the stroke drew it at. A rotated right triangle has no preset
-                // orientation, so it stays ink instead of being drawn at the wrong corner.
-                let (flip_h, flip_v) = right_triangle_flips(c)?;
-                let [x, y, w, h] = found.bounds();
-                (kind, Some((box_anchor(sheet, idx, x, y, w.max(1.0), h.max(1.0))?, flip_h, flip_v)))
-            } else {
-                (kind, None)
-            }
+            // The recognised kind and the flips that place its preset. A polygon with no preset
+            // orientation stays ink instead of being drawn at the wrong corners.
+            let (kind, flip_h, flip_v) = polygon_kind(c)?;
+            // A polygon preset is inscribed in its box the way the recognised corners are in
+            // theirs, so the box is the corners' bounds, not the stroke's (which strays outside
+            // them where the simplifier dropped the wobble).
+            let [x, y, w, h] = found.bounds();
+            (kind, Some((box_anchor(sheet, idx, x, y, w.max(1.0), h.max(1.0))?, flip_h, flip_v)))
         }
     };
     // Excel's square and circle are the same presets with equal sides: take the recogniser's
@@ -239,29 +236,65 @@ fn segment_anchor(sheet: &Sheet, idx: usize, tail: [f32; 2], tip: [f32; 2]) -> O
     Some((anchor, tip[0] < tail[0], tip[1] < tail[1]))
 }
 
-/// Map a recognised polygon onto GridCraft's preset shapes: triangles and quads use the same
-/// corner tests as before (right triangle; diamond/parallelogram/trapezoid), 5 and 6 sides are
-/// the pentagon/hexagon presets. Seven or eight corners have no preset.
-fn polygon_kind(c: &[[f32; 2]]) -> Option<ShapeKind> {
+/// Map a recognised polygon onto GridCraft's preset shapes, with the flips that place it: a
+/// triangle is a right or an upright isosceles one, quads use the diamond/parallelogram/trapezoid
+/// tests, and 5 and 6 sides are the pentagon/hexagon presets. Seven or eight corners have no
+/// preset, and neither has a polygon whose corners do not fit the preset's own.
+fn polygon_kind(c: &[[f32; 2]]) -> Option<(ShapeKind, bool, bool)> {
     match c.len() {
-        3 => Some(triangle_kind(c)),
-        4 => quad_kind(c),
-        5 => Some(ShapeKind::Pentagon),
-        6 => Some(ShapeKind::Hexagon),
+        3 => triangle_kind(c),
+        4 => quad_kind(c).map(|kind| (kind, false, false)),
+        5 => Some((ShapeKind::Pentagon, false, false)),
+        6 => Some((ShapeKind::Hexagon, false, false)),
         _ => None,
     }
 }
 
-fn triangle_kind(p: &[[f32; 2]]) -> ShapeKind {
+/// The kind a three-corner polygon maps to, with its flips: a right angle goes to the
+/// `RightTriangle` preset, and a triangle matching the centred-apex `Triangle` preset keeps its
+/// orientation, mirrored down when the apex is on the bottom edge. A scalene or rotated triangle
+/// would be drawn with its apex moved, so it stays ink.
+fn triangle_kind(p: &[[f32; 2]]) -> Option<(ShapeKind, bool, bool)> {
     if p.len() != 3 {
-        return ShapeKind::Triangle;
+        return None;
     }
     let sides = [dist(p[0], p[1]), dist(p[1], p[2]), dist(p[2], p[0])];
     let mut sorted = sides;
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let (a, b, c) = (sorted[0], sorted[1], sorted[2]);
-    // The right angle sits opposite the longest side.
-    if (a * a + b * b - c * c).abs() < 0.08 * c * c { ShapeKind::RightTriangle } else { ShapeKind::Triangle }
+    // The right angle sits opposite the longest side. GridCraft's preset has it at the box's
+    // bottom-left; flips move it to the corner the stroke drew it at. A rotated right triangle
+    // has no preset orientation, so it stays ink instead of being drawn at the wrong corner.
+    if (a * a + b * b - c * c).abs() < 0.08 * c * c {
+        let (flip_h, flip_v) = right_triangle_flips(p)?;
+        return Some((ShapeKind::RightTriangle, flip_h, flip_v));
+    }
+    // The `Triangle` preset is a centred apex over a base along one box edge. Only a triangle
+    // that is one, within hand wobble, is inscribed in its box that way: anything else would lose
+    // its apex.
+    let x0 = p.iter().map(|q| q[0]).fold(f32::INFINITY, f32::min);
+    let x1 = p.iter().map(|q| q[0]).fold(f32::NEG_INFINITY, f32::max);
+    let y0 = p.iter().map(|q| q[1]).fold(f32::INFINITY, f32::min);
+    let y1 = p.iter().map(|q| q[1]).fold(f32::NEG_INFINITY, f32::max);
+    let tol = 0.15 * (x1 - x0).min(y1 - y0).max(1.0);
+    let near = |v: f32, at: f32| (v - at).abs() <= tol;
+    // One corner on the top edge is an apex up; two put the apex on the bottom edge, which the
+    // preset reaches by mirroring the box down.
+    let top: Vec<usize> = (0..3).filter(|&i| near(p[i][1], y0)).collect();
+    let (apex, flip_v) = match top[..] {
+        [i] => (i, false),
+        [_, _] => ((0..3).find(|i| !top.contains(i))?, true),
+        _ => return None,
+    };
+    let base: Vec<usize> = (0..3).filter(|&i| i != apex).collect();
+    let (mut left, mut right) = (p[base[0]], p[base[1]]);
+    if left[0] > right[0] {
+        (left, right) = (right, left);
+    }
+    let base_y = if flip_v { y0 } else { y1 };
+    let centred = near(p[apex][0], (x0 + x1) / 2.0) && near(p[apex][1], if flip_v { y1 } else { y0 });
+    let seated = near(left[0], x0) && near(right[0], x1) && near(left[1], base_y) && near(right[1], base_y);
+    (centred && seated).then_some((ShapeKind::Triangle, false, flip_v))
 }
 
 /// The flips that move GridCraft's `RightTriangle` preset (right angle at the box's bottom-left)

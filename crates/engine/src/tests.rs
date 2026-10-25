@@ -3224,6 +3224,44 @@ fn ink_to_shape_maps_a_square_standing_on_its_corner_to_a_diamond() {
 }
 
 #[test]
+fn ink_to_shape_anchors_polygon_presets_to_the_recognised_corners() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    // A hexagon whose top edge bows out by 4 points. The simplifier drops the bow (its tolerance
+    // is a twentieth of the diagonal, about 6 points), so the recognised corners are the plain
+    // 100 × 60 hexagon while the raw stroke is 100 × 64: the preset is inscribed in the corners'
+    // box, so the anchor must be that box and not the stroke's.
+    let pts: Vec<[f64; 2]> = vec![[20.0, 10.0], [50.0, 6.0], [80.0, 10.0], [100.0, 40.0], [80.0, 70.0], [20.0, 70.0], [0.0, 40.0], [20.0, 10.0]];
+    let r = s.execute("draw.stroke", json!({"points": pts})).unwrap();
+    assert_eq!(r["kind"], "Hexagon");
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Hexagon);
+    assert!((sh.anchor.width - 100.0).abs() < 0.5, "{:?}", sh.anchor);
+    assert!((sh.anchor.height - 60.0).abs() < 0.5, "the anchor is the corners' box, not the stroke's: {:?}", sh.anchor);
+}
+
+#[test]
+fn ink_to_shape_keeps_only_triangles_the_preset_can_draw() {
+    let mut s = s();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    // An isosceles triangle with its apex up: the preset as drawn.
+    s.execute("draw.stroke", json!({"points": [[0, 60], [100, 60], [50, 0], [0, 60]]})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[0].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Triangle);
+    assert!(!sh.format.flip_v, "{:?}", sh.format);
+    // Apex down: the same preset mirrored inside its box, so it keeps pointing down.
+    s.execute("draw.stroke", json!({"points": [[0, 0], [100, 0], [50, 60], [0, 0]]})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().shapes[1].clone();
+    assert_eq!(sh.kind, gridcraft_model::ShapeKind::Triangle);
+    assert!(sh.format.flip_v, "the apex belongs at the bottom: {:?}", sh.format);
+    // A scalene triangle: the preset's apex sits in the middle of the box, so converting this
+    // would move the drawn apex halfway across. The stroke stays ink.
+    let r = s.execute("draw.stroke", json!({"points": [[0, 0], [100, 0], [30, 60], [0, 0]]})).unwrap();
+    assert_eq!(r["kind"], "Ink");
+    assert_eq!(s.doc().unwrap().wb.active().unwrap().shapes[2].kind, gridcraft_model::ShapeKind::Ink);
+}
+
+#[test]
 fn ink_to_shape_keeps_a_right_triangles_right_angle_corner() {
     let mut s = s();
     s.execute("draw.inkToShape", json!({"on": true})).unwrap();
