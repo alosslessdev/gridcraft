@@ -11,7 +11,8 @@
 //! that polygon stays close to every point. An arrow is a line-like shaft plus a head of two barbs
 //! drawn in the same stroke (shaft first or head first). Anything else (scribbles, curves, letters) stays ink.
 
-/// The most points the recogniser looks at (same bound as WordCraft's freeform ink).
+/// The most points the recogniser looks at (same bound as WordCraft's freeform ink): a longer
+/// stroke is not classified at all, rather than from a prefix of its points.
 const MAX_POINTS: usize = 4_000;
 
 /// A shape recognised in a stroke, in the stroke's own coordinates.
@@ -62,11 +63,15 @@ pub const MAX_CORNERS: usize = 8;
 
 /// The shape `pts` draws, if it is one.
 pub fn recognise(pts: &[[f32; 2]]) -> Option<InkShape> {
-    // Finite points only, without repeats.
-    let mut p: Vec<[f32; 2]> = Vec::with_capacity(pts.len().min(MAX_POINTS));
-    for q in pts.iter().take(MAX_POINTS).filter(|[x, y]| x.is_finite() && y.is_finite() && x.abs() < 1e6 && y.abs() < 1e6) {
+    // Finite points only, without repeats. A stroke above the bound stays ink: classifying the
+    // points that fitted would read a prefix that may have closed on itself halfway.
+    let mut p: Vec<[f32; 2]> = Vec::with_capacity(pts.len().min(MAX_POINTS + 1));
+    for q in pts.iter().filter(|[x, y]| x.is_finite() && y.is_finite() && x.abs() < 1e6 && y.abs() < 1e6) {
         if p.last() != Some(q) {
             p.push(*q);
+        }
+        if p.len() > MAX_POINTS {
+            return None;
         }
     }
     let (first, last) = (*p.first()?, *p.last()?);
@@ -690,5 +695,23 @@ mod tests {
         stroke.reverse();
         let b = tip_of(&stroke);
         assert!(b.is_some_and(|b| dist(b, tip) < 1.0), "overshoot head first: {b:?}");
+    }
+
+    #[test]
+    fn strokes_over_the_point_bound_stay_ink_instead_of_being_classified_from_a_prefix() {
+        // One point per unit along a straight line: the bound's worth is a line, one more point
+        // makes the stroke longer than the recogniser looks at, so it stays ink rather than
+        // being classified from the points that fitted.
+        let line = |n: usize| -> Vec<[f32; 2]> { (0..n).map(|i| [i as f32, 0.0]).collect() };
+        assert!(matches!(recognise(&line(MAX_POINTS)), Some(InkShape::Line { .. })));
+        assert_eq!(recognise(&line(MAX_POINTS + 1)), None);
+        // Points the recogniser cannot use are not counted: junk around a stroke within the
+        // bound does not push it over, and neither do repeated stops.
+        let mut padded = line(MAX_POINTS);
+        padded.extend(std::iter::repeat_n([f32::NAN, 0.0], MAX_POINTS));
+        padded.push([f32::INFINITY, 3.0]);
+        assert!(matches!(recognise(&padded), Some(InkShape::Line { .. })));
+        let doubled: Vec<[f32; 2]> = line(MAX_POINTS).into_iter().flat_map(|q| [q, q]).collect();
+        assert!(matches!(recognise(&doubled), Some(InkShape::Line { .. })));
     }
 }
