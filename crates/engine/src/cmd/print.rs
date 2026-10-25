@@ -911,21 +911,29 @@ fn font_for(style: &Style) -> Font {
     Font::styled(Font::family_for(&style.font.name), style.font.bold, style.font.italic)
 }
 
+/// Tiles across one axis of a gradient cell: one per 8 pt, at least 2 and at most 16, as the grid
+/// renderer sizes its mesh. A fixed 16×16 forced every cell, however small, to pay 256 solid fills;
+/// scaling them bounds the page even when a whole large range is gradient-filled.
+fn gradient_tiles(len: f32) -> usize {
+    ((len / 8.0).ceil() as usize).clamp(2, 16)
+}
+
 /// Paints a gradient as a small grid of solid rectangles. PDF has real shading objects, but the
-/// writer's page model is deliberately simple and a 16×16 grid keeps the output bounded.
+/// writer's page model is deliberately simple, so the cell is tessellated at the grid renderer's
+/// resolution: a bounded number of tiles per axis, from the cell's size.
 fn fill_gradient(pg: &mut Page, x: f32, y: f32, w: f32, h: f32, g: &GradientFill, theme: &Theme) {
-    const N: usize = 16;
     if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
         return;
     }
-    let cw = w / N as f32;
-    let ch = h / N as f32;
-    // Resolve theme colours once per cell, not once per tile (`sample` would allocate 256 times).
+    let (cols, rows) = (gradient_tiles(w), gradient_tiles(h));
+    let cw = w / cols as f32;
+    let ch = h / rows as f32;
+    // Resolve theme colours once per cell, not once per tile (`sample` would allocate per tile).
     let stops = g.resolved_stops(theme);
-    for iy in 0..N {
-        for ix in 0..N {
-            let u = (ix as f32 + 0.5) / N as f32;
-            let v = (iy as f32 + 0.5) / N as f32;
+    for iy in 0..rows {
+        for ix in 0..cols {
+            let u = (ix as f32 + 0.5) / cols as f32;
+            let v = (iy as f32 + 0.5) / rows as f32;
             if let Some(rgb) = g.sample_resolved(&stops, u as f64, v as f64) {
                 // A hair of overlap hides seams between the rectangles.
                 pg.fill_rect(x + ix as f32 * cw, y + iy as f32 * ch, cw + 0.05, ch + 0.05, rgb);
@@ -2460,7 +2468,30 @@ mod tests {
         assert!(pages > 0);
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.starts_with("%PDF"), "not a PDF");
-        assert!(text.matches(" re f").count() > 400, "the gradient was not tessellated: {}", text.matches(" re f").count());
+        // A default cell is 48×15 pt, so six tiles across and two down: four cells.
+        assert_eq!(text.matches(" re f").count(), 4 * 6 * 2, "the gradient was not tessellated");
+    }
+
+    /// Tiles follow the cell's size, as the grid renderer's mesh does: a small cell must not pay
+    /// for a 16×16 grid, and a large one still reaches the cap.
+    #[test]
+    fn gradient_tiles_scale_with_the_cell() {
+        let fill = Fill::gradient(
+            GradientKind::Linear { degree: 90.0 },
+            vec![GradientStop { position: 0.0, color: Color::Rgb(0xFF0000) }, GradientStop { position: 1.0, color: Color::Rgb(0x0000FF) }],
+        );
+        let tiles = |w: f64, h: f64| {
+            let mut s = s();
+            s.execute("home.columnWidth", json!({"cols": "A", "width": w})).unwrap();
+            s.execute("home.rowHeight", json!({"rows": "1", "height": h})).unwrap();
+            s.execute("home.formatCells", json!({"range": "A1", "style": {"fill": fill.clone()}})).unwrap();
+            let (pdf, _) = pdf_of(&mut s, json!({"range": "A1"}));
+            String::from_utf8_lossy(&pdf).matches(" re f").count()
+        };
+        // 12 px is 9 pt a side: the 2×2 floor, far below the 16 tiles each axis used to emit.
+        assert_eq!(tiles(12.0, 12.0), 4);
+        // 400 px is 300 pt a side, well past the 8 pt step, so both axes reach the 16-tile cap.
+        assert_eq!(tiles(400.0, 400.0), 16 * 16);
     }
 
     /// Gradient formatting alone draws: a blank, formatted cell must not be skipped as empty.
@@ -2479,7 +2510,7 @@ mod tests {
         let (pdf, pages) = pdf_of(&mut s, json!({"fitToPage": true}));
         assert!(pages > 0);
         let text = String::from_utf8_lossy(&pdf);
-        assert!(text.matches(" re f").count() > 400, "blank gradient cells were skipped: {}", text.matches(" re f").count());
+        assert_eq!(text.matches(" re f").count(), 4 * 6 * 2, "blank gradient cells were skipped");
     }
 
     #[test]
