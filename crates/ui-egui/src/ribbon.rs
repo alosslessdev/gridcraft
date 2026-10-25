@@ -2898,16 +2898,15 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
 
 fn automate(app: &mut SheetApp, ui: &mut Ui) {
     // Scripting Tools
-    if big_button(ui, Icon::Script, "All\nScripts", "All scripts in this workbook (Alt+F8)", false).clicked() {
+    let all = big_button(ui, Icon::Script, "All\nScripts", "All scripts in this workbook (Alt+F8)", false);
+    all.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), "All Scripts"));
+    if all.clicked() {
         app.open_dialog("macros", json!({}));
     }
     if big_button(ui, Icon::Script, "Record\nActions", "Record the commands you run as a script", false).clicked() {
         act(app, "automate.recordActions", json!({}));
     }
     sep(ui);
-    if big_button(ui, Icon::Script, "Macros", "Macros and scripts in this workbook (Alt+F8)", false).clicked() {
-        app.open_dialog("macros", json!({}));
-    }
     let __k = big_button(ui, Icon::Script, "Command\nPalette", "Search and run any command", false);
     control_keytip(app, ui, &__k, "commandSearch");
     if __k.clicked() {

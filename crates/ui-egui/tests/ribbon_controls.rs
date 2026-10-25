@@ -257,3 +257,16 @@ fn blank_pivot_and_consolidate_inputs_open_their_dialogs() {
         h.run_steps(2);
     }
 }
+
+/// Automate ▸ GridCraft keeps one control for the macros dialog: All Scripts already opens it, so
+/// the older Macros button beside it is gone rather than doing the same thing twice (#1798).
+#[test]
+fn the_automate_tab_has_one_macros_control() {
+    let mut h = harness();
+    tab(&mut h, "Automate");
+    let painted = h.output().shapes.iter().filter(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.job.text == "Macros")).count();
+    assert_eq!(painted, 0, "no second Macros button beside All Scripts");
+    click(&mut h, "All Scripts");
+    assert_eq!(dialog_name(&h).as_deref(), Some("macros"), "All Scripts opens the macros dialog");
+    assert!(h.state().message.is_none(), "{:?}", h.state().message);
+}
