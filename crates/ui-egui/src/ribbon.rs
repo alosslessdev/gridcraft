@@ -2238,27 +2238,6 @@ fn formulas(app: &mut SheetApp, ui: &mut Ui) {
         act(app, "formulas.autoSum", json!({}));
     }
     egui::Popup::menu(&sa).show(|ui| autosum_menu(app, ui));
-    let ru = big_button(ui, Icon::Name, "Recently\nUsed", "Recently Used", true);
-    control_keytip(app, ui, &ru, "formulas.recentlyUsed");
-    egui::Popup::menu(&ru).show(|ui| {
-        let list = app.session.run("formulas.recentlyUsed", json!({})).ok();
-        let rows: Vec<String> = list
-            .as_ref()
-            .and_then(|v| v.as_array().cloned().or_else(|| v.get("functions").and_then(|f| f.as_array().cloned())))
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string).or_else(|| v.get("name").and_then(|n| n.as_str()).map(str::to_string)))
-            .collect();
-        if rows.is_empty() {
-            ui.label("No recently used functions yet");
-        }
-        for n in rows {
-            if ui.button(&n).clicked() {
-                app.run_or_alert("formulas.insertFunction", json!({"name": n}));
-                ui.close();
-            }
-        }
-    });
     for (label, cat, cid) in [
         ("Financial", "Financial", "formulas.financial"),
         ("Logical", "Logical", "formulas.logical"),
