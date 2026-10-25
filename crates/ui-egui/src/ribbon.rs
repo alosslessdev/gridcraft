@@ -2692,11 +2692,11 @@ const VIEW_TAB_COMPACT_WIDTH: f32 = 1280.0;
 fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
     let compact = viewport < VIEW_TAB_COMPACT_WIDTH;
     if compact {
-        ui.spacing_mut().item_spacing.x = 1.0;
+        ui.spacing_mut().item_spacing.x = 0.0;
     }
-    let break_width = if compact { 8.0 } else { 13.0 };
-    let theme_w = if compact { 80.0 } else { 88.0 };
-    let scale_w = if compact { 80.0 } else { 88.0 };
+    let break_width = if compact { 5.0 } else { 13.0 };
+    let theme_w = if compact { 76.0 } else { 88.0 };
+    let scale_w = if compact { 76.0 } else { 88.0 };
     let language_w = if compact { 88.0 } else { 100.0 };
     let t = Tokens::get(ui.ctx());
     let _ = t;
@@ -2738,7 +2738,7 @@ fn view(app: &mut SheetApp, ui: &mut Ui, viewport: f32) {
             act(app, "view.gridlines", json!({"on": g}));
         }
     });
-    ui.add_space(6.0);
+    ui.add_space(if compact { 2.0 } else { 6.0 });
     ui.vertical(|ui| {
         let mut fb = app.session.prefs.formula_bar;
         let resp = ui.checkbox(&mut fb, lang.tr("Formula Bar"));
