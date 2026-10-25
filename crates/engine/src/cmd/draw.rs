@@ -126,7 +126,9 @@ pub fn ink_points(sh: &Shape) -> Vec<[f32; 2]> {
 }
 
 fn ink_to_shape(s: &mut Session, p: &Json) -> Result<Json> {
-    if let Some(id) = u32_param(p, "id") {
+    if let Some(id) = p.get("id") {
+        // An explicit id that is not a stroke id is a bad parameter, not "the last stroke".
+        let id = id.as_u64().and_then(|v| u32::try_from(v).ok()).ok_or_else(|| bad("draw.inkToShape", "`id` must be an ink stroke id"))?;
         let kind = convert_ink(s, Some(id))?;
         return Ok(json!({"kind": format!("{kind:?}"), "on": s.ink_to_shape}));
     }

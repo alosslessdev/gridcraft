@@ -3150,6 +3150,19 @@ fn ink_strokes_and_ink_to_shape() {
 }
 
 #[test]
+fn ink_to_shape_rejects_an_invalid_id_instead_of_converting_the_last_stroke() {
+    let mut s = s();
+    s.execute("draw.stroke", json!({"points": [[100.0, 100.0], [200.0, 102.0], [201.0, 180.0], [99.0, 181.0], [101.0, 104.0]]})).unwrap();
+    // An explicit id that is not a number is a bad parameter, not a request for the last stroke.
+    for id in [json!("1"), json!(-1), json!(1.5), json!(null), json!(4_294_967_296_u64)] {
+        assert!(matches!(s.execute("draw.inkToShape", json!({"id": id})), Err(crate::EngineError::BadParams { .. })), "id {id} must be rejected");
+    }
+    assert_eq!(s.doc().unwrap().wb.active().unwrap().shapes[0].kind, gridcraft_model::ShapeKind::Ink, "the stroke stays ink");
+    // No id still converts the last stroke.
+    assert_eq!(s.execute("draw.inkToShape", json!({})).unwrap()["kind"], "Rectangle");
+}
+
+#[test]
 fn ink_to_shape_mode_converts_every_stroke_and_snaps_squares() {
     let mut s = s();
     assert_eq!(s.execute("draw.inkToShape", json!({"on": true})).unwrap()["on"], true);
