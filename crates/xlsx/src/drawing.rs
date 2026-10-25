@@ -204,7 +204,8 @@ fn read_shape(obj: &El, anchor: Anchor) -> Option<Shape> {
     let prst = sp.child("prstGeom").and_then(|g| g.attr("prst")).unwrap_or("rect");
     let tx_box = obj.path(&["nvSpPr", "cNvSpPr"]).is_some_and(|c| c.flag("txBox", false));
     let ln = sp.child("ln");
-    let arrow = ln.is_some_and(|l| l.child("tailEnd").or_else(|| l.child("headEnd")).is_some_and(|t| t.attr("type").is_some_and(|v| v != "none")));
+    let mark = |l: &El, tag: &str| l.child(tag).is_some_and(|t| t.attr("type").is_some_and(|v| v != "none"));
+    let arrow = ln.is_some_and(|l| mark(l, "tailEnd") || mark(l, "headEnd"));
     let kind = match prst {
         _ if tx_box => ShapeKind::TextBox,
         "roundRect" => ShapeKind::RoundedRectangle,
@@ -232,8 +233,13 @@ fn read_shape(obj: &El, anchor: Anchor) -> Option<Shape> {
         .unwrap_or_default();
     let mut format = read_text_format(obj.child("txBody"));
     format.no_line = ln.is_some_and(|l| l.child("noFill").is_some());
-    format.flip_h = xf.is_some_and(|x| x.flag("flipH", false));
-    format.flip_v = xf.is_some_and(|x| x.flag("flipV", false));
+    // A head at the start and none at the end: the source arrowhead sits on the line's first
+    // point, while the model's `Arrow` always heads its second endpoint. Inverting both flips
+    // moves that mirrored endpoint onto the source's head, and the export's `tailEnd` written
+    // with the same flips keeps the arrow where it was.
+    let head_end = kind == ShapeKind::Arrow && ln.is_some_and(|l| mark(l, "headEnd") && !mark(l, "tailEnd"));
+    format.flip_h = xf.is_some_and(|x| x.flag("flipH", false)) ^ head_end;
+    format.flip_v = xf.is_some_and(|x| x.flag("flipV", false)) ^ head_end;
     Some(Shape { id: 0, kind, anchor, fill, line, text, format })
 }
 

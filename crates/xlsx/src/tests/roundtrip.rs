@@ -1516,3 +1516,55 @@ fn flipped_shapes_keep_their_mirroring_round_trip() {
     assert!(!sh.format.flip_v);
     assert_eq!(sh.anchor.height, 0.0);
 }
+
+/// An arrowhead on the line's first point (`a:headEnd` without `a:tailEnd`). The model's `Arrow`
+/// always heads its second endpoint, so the import inverts both flips: the head lands where the
+/// source drew it, and the export's `tailEnd` with the same flips keeps it there.
+#[test]
+fn head_end_arrows_import_with_inverted_flips() {
+    let drawing = |xfrm: &str, ends: &str| {
+        format!(
+            r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="952500" cy="476250"/><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="1" name="Arrow"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm{xfrm}><a:off x="0" y="0"/><a:ext cx="952500" cy="476250"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill>{ends}</a:ln></xdr:spPr></xdr:sp><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>"#
+        )
+    };
+    let read = |xml: &str| {
+        let rels = r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#;
+        let bytes = super::minimal(
+            r#"<sheetData/><drawing r:id="rId1"/>"#,
+            &[("xl/worksheets/_rels/sheet1.xml.rels", rels), ("xl/drawings/drawing1.xml", xml)],
+            "",
+            "",
+        );
+        read_xlsx(&bytes).unwrap().0
+    };
+    let head = r#"<a:headEnd type="triangle"/>"#;
+    let tail = r#"<a:tailEnd type="triangle"/>"#;
+    let cases = [
+        // (xfrm attributes, line ends, kind, flip_h, flip_v). A head-end arrow is mirrored so the
+        // model's second endpoint (its arrowhead) lands on the source's head.
+        ("", head, ShapeKind::Arrow, true, true),
+        (r#" flipH="1""#, head, ShapeKind::Arrow, false, true),
+        (r#" flipV="1""#, head, ShapeKind::Arrow, true, false),
+        (r#" flipH="1" flipV="1""#, head, ShapeKind::Arrow, false, false),
+        // A tail head is already the second endpoint: the flips stay as written.
+        (r#" flipH="1""#, tail, ShapeKind::Arrow, true, false),
+        // Both ends: the model keeps an arrow at the second endpoint, so nothing is inverted.
+        (r#" flipH="1" flipV="1""#, &format!("{head}{tail}"), ShapeKind::Arrow, true, true),
+        // `type="none"` is no head at all.
+        (r#" flipH="1""#, r#"<a:headEnd type="none"/>"#, ShapeKind::Line, true, false),
+    ];
+    for (xfrm, ends, kind, flip_h, flip_v) in cases {
+        let wb = read(&drawing(xfrm, ends));
+        let sh = &wb.sheet(0).unwrap().shapes[0];
+        assert_eq!(sh.kind, kind, "{xfrm} {ends}");
+        assert_eq!((sh.format.flip_h, sh.format.flip_v), (flip_h, flip_v), "{xfrm} {ends}");
+        if kind == ShapeKind::Arrow {
+            // Saving writes the head as a `tailEnd` with these flips, so the arrow stays put.
+            let (back, rep) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+            assert!(rep.warnings.is_empty(), "{:?}", rep.warnings);
+            let sh = &back.sheet(0).unwrap().shapes[0];
+            assert_eq!(sh.kind, ShapeKind::Arrow, "{xfrm} {ends}");
+            assert_eq!((sh.format.flip_h, sh.format.flip_v), (flip_h, flip_v), "{xfrm} {ends}");
+        }
+    }
+}
