@@ -746,6 +746,30 @@ fn check_performance_optimize_sheet_clears_only_that_sheet() {
     assert_eq!((report["sheets"][0]["optimizableCells"].as_u64(), report["sheets"][1]["optimizableCells"].as_u64()), (Some(0), Some(1)));
 }
 
+/// The pane keeps pointing at the sheet each row was drawn for when sheets move underneath it: a
+/// positional index would clear the formatting of whichever sheet took that place.
+#[test]
+fn check_performance_optimize_sheet_follows_its_sheet_when_sheets_move() {
+    let mut s = blank();
+    s.execute("home.insertSheet", json!({"name": "Two"})).unwrap();
+    for (sheet, cell) in [(0, "A1"), (1, "B2")] {
+        s.execute("home.bold", json!({"sheet": sheet, "range": cell, "on": true})).unwrap();
+    }
+    let mut h = harness(s);
+    h.state_mut().open_dialog("checkPerformance", json!({}));
+    h.run_steps(2);
+    // Sheet1 now sits at index 1, but the open pane still lists it first.
+    h.state_mut().session.execute("sheet.move", json!({"sheet": 0, "to": 1})).unwrap();
+    h.run_steps(2);
+    h.get_all_by_label("Optimize sheet").next().expect("the Sheet1 row").click();
+    h.run_steps(3);
+    let report = h.state().dialog.as_ref().unwrap().result.clone().unwrap();
+    let rows = report["sheets"].as_array().unwrap().clone();
+    let optimizable = |name: &str| rows.iter().find(|s| s["name"] == name).unwrap()["optimizableCells"].as_u64();
+    assert_eq!(optimizable("Sheet1"), Some(0), "the sheet the row was drawn for was optimized");
+    assert_eq!(optimizable("Two"), Some(1), "the sheet that took index 0 keeps its formatting");
+}
+
 #[test]
 /// Each listed dialog opens, passes accessibility and closes.
 fn dialogs_open_and_close() {

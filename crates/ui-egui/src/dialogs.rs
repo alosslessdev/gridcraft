@@ -2420,7 +2420,6 @@ fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open
     ui.separator();
     for sheet in &sheets {
         let name = sheet.get("name").and_then(Json::as_str).unwrap_or("");
-        let index = sheet.get("index").and_then(Json::as_u64);
         let sheet_used = sheet.get("usedCells").and_then(Json::as_u64).unwrap_or(0);
         let sheet_optimizable = sheet.get("optimizableCells").and_then(Json::as_u64).unwrap_or(0);
         let protected = sheet.get("protected").and_then(Json::as_bool).unwrap_or(false);
@@ -2433,7 +2432,9 @@ fn check_performance(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, open
                     .replace("{optimizable}", &sheet_optimizable.to_string()),
             );
             if sheet_optimizable > 0 && !protected && ui.button(lang.tr("Optimize sheet")).clicked() {
-                optimize_sheet = Some(json!(index));
+                // The name identifies the sheet the row was drawn for, so reordering sheets
+                // while the pane is open cannot retarget the button to another sheet.
+                optimize_sheet = Some(json!(name));
             }
         });
     }
