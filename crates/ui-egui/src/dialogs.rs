@@ -1741,10 +1741,8 @@ fn ok_cancel_enabled(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool, ena
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let lang = crate::i18n::current(ui.ctx());
             let t = crate::theme::Tokens::get(ui.ctx());
-            let ok = ui.add_enabled(
-                enabled,
-                egui::Button::new(egui::RichText::new(format!("   {}   ", lang.tr("OK"))).color(t.on_accent)).fill(t.accent),
-            );
+            let ok =
+                ui.add_enabled(enabled, egui::Button::new(egui::RichText::new(format!("   {}   ", lang.tr("OK"))).color(t.on_accent)).fill(t.accent));
             if enabled && (ok.clicked() || ui.input(|i| i.key_pressed(Key::Enter))) {
                 *confirm = true;
             }

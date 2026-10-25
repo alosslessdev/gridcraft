@@ -1004,16 +1004,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Seleziona un tipo di regola",
         "Edit the Rule Description" => "Modifica la descrizione della regola",
         "Format only cells that contain" => "Formatta solo le celle che contengono",
-        "Format only top or bottom ranked values" => {
-            "Formatta solo i valori con classificazione superiore o inferiore"
-        }
-        "Format only values that are above or below average" => {
-            "Formatta solo i valori superiori o inferiori alla media"
-        }
+        "Format only top or bottom ranked values" => "Formatta solo i valori con classificazione superiore o inferiore",
+        "Format only values that are above or below average" => "Formatta solo i valori superiori o inferiori alla media",
         "Format only unique or duplicate values" => "Formatta solo valori univoci o duplicati",
-        "Use a formula to determine which cells to format" => {
-            "Usa una formula per determinare quali celle formattare"
-        }
+        "Use a formula to determine which cells to format" => "Usa una formula per determinare quali celle formattare",
         "This rule type isn't available yet." => "Questo tipo di regola non è ancora disponibile.",
         _ => return None,
     })

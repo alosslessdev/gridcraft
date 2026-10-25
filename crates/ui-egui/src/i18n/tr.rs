@@ -434,21 +434,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Kural Türü Seçin",
         "Edit the Rule Description" => "Kural Açıklamasını Düzenle",
         "Format only cells that contain" => "Yalnızca şunu içeren hücreleri biçimlendir",
-        "Format only top or bottom ranked values" => {
-            "Yalnızca en yüksek veya en düşük sıralamadaki değerleri biçimlendir"
-        }
-        "Format only values that are above or below average" => {
-            "Yalnızca ortalamanın üstündeki veya altındaki değerleri biçimlendir"
-        }
-        "Format only unique or duplicate values" => {
-            "Yalnızca benzersiz veya yinelenen değerleri biçimlendir"
-        }
-        "Use a formula to determine which cells to format" => {
-            "Hangi hücrelerin biçimlendirileceğini belirlemek için formül kullan"
-        }
-        "Format values where this formula is true:" => {
-            "Bu formülün doğru olduğu değerleri biçimlendir:"
-        }
+        "Format only top or bottom ranked values" => "Yalnızca en yüksek veya en düşük sıralamadaki değerleri biçimlendir",
+        "Format only values that are above or below average" => "Yalnızca ortalamanın üstündeki veya altındaki değerleri biçimlendir",
+        "Format only unique or duplicate values" => "Yalnızca benzersiz veya yinelenen değerleri biçimlendir",
+        "Use a formula to determine which cells to format" => "Hangi hücrelerin biçimlendirileceğini belirlemek için formül kullan",
+        "Format values where this formula is true:" => "Bu formülün doğru olduğu değerleri biçimlendir:",
         "with" => "ile",
         "This rule type isn't available yet." => "Bu kural türü henüz kullanılamıyor.",
         _ => return None,

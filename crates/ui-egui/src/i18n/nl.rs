@@ -545,19 +545,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Een regeltype selecteren",
         "Edit the Rule Description" => "De beschrijving van de regel bewerken",
         "Format only cells that contain" => "Alleen cellen opmaken die bevatten",
-        "Format only top or bottom ranked values" => {
-            "Alleen waarden met een hoge of lage rangorde opmaken"
-        }
-        "Format only values that are above or below average" => {
-            "Alleen waarden boven of onder het gemiddelde opmaken"
-        }
+        "Format only top or bottom ranked values" => "Alleen waarden met een hoge of lage rangorde opmaken",
+        "Format only values that are above or below average" => "Alleen waarden boven of onder het gemiddelde opmaken",
         "Format only unique or duplicate values" => "Alleen unieke of dubbele waarden opmaken",
-        "Use a formula to determine which cells to format" => {
-            "Een formule gebruiken om te bepalen welke cellen worden opgemaakt"
-        }
-        "Format values where this formula is true:" => {
-            "Waarden opmaken waarop deze formule waar is:"
-        }
+        "Use a formula to determine which cells to format" => "Een formule gebruiken om te bepalen welke cellen worden opgemaakt",
+        "Format values where this formula is true:" => "Waarden opmaken waarop deze formule waar is:",
         "with" => "met",
         "This rule type isn't available yet." => "Dit regeltype is nog niet beschikbaar.",
         _ => return None,

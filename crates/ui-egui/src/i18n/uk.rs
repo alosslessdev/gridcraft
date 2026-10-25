@@ -997,21 +997,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Виберіть тип правила",
         "Edit the Rule Description" => "Редагувати опис правила",
         "Format only cells that contain" => "Форматувати лише клітинки, що містять",
-        "Format only top or bottom ranked values" => {
-            "Форматувати лише значення з найвищим або найнижчим рейтингом"
-        }
-        "Format only values that are above or below average" => {
-            "Форматувати лише значення вище або нижче середнього"
-        }
-        "Format only unique or duplicate values" => {
-            "Форматувати лише унікальні або повторювані значення"
-        }
-        "Use a formula to determine which cells to format" => {
-            "Використати формулу, щоб визначити, які клітинки форматувати"
-        }
-        "Format values where this formula is true:" => {
-            "Форматувати значення, для яких ця формула істинна:"
-        }
+        "Format only top or bottom ranked values" => "Форматувати лише значення з найвищим або найнижчим рейтингом",
+        "Format only values that are above or below average" => "Форматувати лише значення вище або нижче середнього",
+        "Format only unique or duplicate values" => "Форматувати лише унікальні або повторювані значення",
+        "Use a formula to determine which cells to format" => "Використати формулу, щоб визначити, які клітинки форматувати",
+        "Format values where this formula is true:" => "Форматувати значення, для яких ця формула істинна:",
         "with" => "з",
         "This rule type isn't available yet." => "Цей тип правила ще недоступний.",
         _ => return None,

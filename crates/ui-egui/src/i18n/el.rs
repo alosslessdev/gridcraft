@@ -1001,16 +1001,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Επιλογή τύπου κανόνα",
         "Edit the Rule Description" => "Επεξεργασία περιγραφής κανόνα",
         "Format only cells that contain" => "Μορφοποίηση μόνο κελιών που περιέχουν",
-        "Format only top or bottom ranked values" => {
-            "Μορφοποίηση μόνο τιμών με την υψηλότερη ή χαμηλότερη κατάταξη"
-        }
-        "Format only values that are above or below average" => {
-            "Μορφοποίηση μόνο τιμών πάνω ή κάτω από τον μέσο όρο"
-        }
+        "Format only top or bottom ranked values" => "Μορφοποίηση μόνο τιμών με την υψηλότερη ή χαμηλότερη κατάταξη",
+        "Format only values that are above or below average" => "Μορφοποίηση μόνο τιμών πάνω ή κάτω από τον μέσο όρο",
         "Format only unique or duplicate values" => "Μορφοποίηση μόνο μοναδικών ή διπλότυπων τιμών",
-        "Use a formula to determine which cells to format" => {
-            "Χρήση τύπου για τον καθορισμό των κελιών που θα μορφοποιηθούν"
-        }
+        "Use a formula to determine which cells to format" => "Χρήση τύπου για τον καθορισμό των κελιών που θα μορφοποιηθούν",
         "This rule type isn't available yet." => "Αυτός ο τύπος κανόνα δεν είναι ακόμη διαθέσιμος.",
         _ => return None,
     })

@@ -1057,16 +1057,10 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Selectați un tip de regulă",
         "Edit the Rule Description" => "Editați descrierea regulii",
         "Format only cells that contain" => "Formatați numai celulele care conțin",
-        "Format only top or bottom ranked values" => {
-            "Formatați numai valorile clasate primele sau ultimele"
-        }
-        "Format only values that are above or below average" => {
-            "Formatați numai valorile peste sau sub medie"
-        }
+        "Format only top or bottom ranked values" => "Formatați numai valorile clasate primele sau ultimele",
+        "Format only values that are above or below average" => "Formatați numai valorile peste sau sub medie",
         "Format only unique or duplicate values" => "Formatați numai valorile unice sau duplicate",
-        "Use a formula to determine which cells to format" => {
-            "Utilizați o formulă pentru a stabili ce celule să fie formatate"
-        }
+        "Use a formula to determine which cells to format" => "Utilizați o formulă pentru a stabili ce celule să fie formatate",
         "This rule type isn't available yet." => "Acest tip de regulă nu este încă disponibil.",
         _ => return None,
     })

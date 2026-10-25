@@ -436,21 +436,11 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Select a Rule Type" => "Chọn loại quy tắc",
         "Edit the Rule Description" => "Sửa mô tả quy tắc",
         "Format only cells that contain" => "Chỉ định dạng các ô chứa",
-        "Format only top or bottom ranked values" => {
-            "Chỉ định dạng các giá trị có thứ hạng cao nhất hoặc thấp nhất"
-        }
-        "Format only values that are above or below average" => {
-            "Chỉ định dạng các giá trị trên hoặc dưới mức trung bình"
-        }
-        "Format only unique or duplicate values" => {
-            "Chỉ định dạng các giá trị duy nhất hoặc trùng lặp"
-        }
-        "Use a formula to determine which cells to format" => {
-            "Dùng công thức để xác định ô nào cần định dạng"
-        }
-        "Format values where this formula is true:" => {
-            "Định dạng các giá trị mà công thức này đúng:"
-        }
+        "Format only top or bottom ranked values" => "Chỉ định dạng các giá trị có thứ hạng cao nhất hoặc thấp nhất",
+        "Format only values that are above or below average" => "Chỉ định dạng các giá trị trên hoặc dưới mức trung bình",
+        "Format only unique or duplicate values" => "Chỉ định dạng các giá trị duy nhất hoặc trùng lặp",
+        "Use a formula to determine which cells to format" => "Dùng công thức để xác định ô nào cần định dạng",
+        "Format values where this formula is true:" => "Định dạng các giá trị mà công thức này đúng:",
         "with" => "với",
         "This rule type isn't available yet." => "Loại quy tắc này chưa khả dụng.",
         _ => return None,
