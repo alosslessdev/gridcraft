@@ -418,6 +418,41 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Enable iterative calculation" => "Bật tính toán lặp",
         "Calculation settings are saved with the workbook." => "Thiết lập tính toán được lưu cùng sổ làm việc.",
         "Text Box" => "Hộp văn bản",
+        // Conditional formatting: colour scales.
+        "New Formatting Rule" => "Quy tắc định dạng mới",
+        "Format all cells based on their values" => "Định dạng tất cả ô dựa trên giá trị của chúng",
+        "Format Style:" => "Kiểu định dạng:",
+        "2-Color Scale" => "Thang 2 màu",
+        "3-Color Scale" => "Thang 3 màu",
+        "Lowest value" => "Giá trị thấp nhất",
+        "Highest value" => "Giá trị cao nhất",
+        "Percent" => "Phần trăm",
+        "Percentile" => "Bách phân vị",
+        "Formula" => "Công thức",
+        "Minimum" => "Tối thiểu",
+        "Maximum" => "Tối đa",
+        "Midpoint" => "Điểm giữa",
+        "More Rules…" => "Thêm quy tắc…",
+        "Select a Rule Type" => "Chọn loại quy tắc",
+        "Edit the Rule Description" => "Sửa mô tả quy tắc",
+        "Format only cells that contain" => "Chỉ định dạng các ô chứa",
+        "Format only top or bottom ranked values" => {
+            "Chỉ định dạng các giá trị có thứ hạng cao nhất hoặc thấp nhất"
+        }
+        "Format only values that are above or below average" => {
+            "Chỉ định dạng các giá trị trên hoặc dưới mức trung bình"
+        }
+        "Format only unique or duplicate values" => {
+            "Chỉ định dạng các giá trị duy nhất hoặc trùng lặp"
+        }
+        "Use a formula to determine which cells to format" => {
+            "Dùng công thức để xác định ô nào cần định dạng"
+        }
+        "Format values where this formula is true:" => {
+            "Định dạng các giá trị mà công thức này đúng:"
+        }
+        "with" => "với",
+        "This rule type isn't available yet." => "Loại quy tắc này chưa khả dụng.",
         _ => return None,
     })
 }

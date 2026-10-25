@@ -977,6 +977,35 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Report Layout" => "Układ raportu",
         "Compact" => "Kompaktowy",
         "Tabular" => "Tabelaryczny",
+        // Conditional formatting: colour scales.
+        "New Formatting Rule" => "Nowa reguła formatowania",
+        "Format all cells based on their values" => "Formatuj wszystkie komórki na podstawie ich wartości",
+        "Format Style:" => "Styl formatu:",
+        "2-Color Scale" => "Skala dwukolorowa",
+        "3-Color Scale" => "Skala trójkolorowa",
+        "Lowest value" => "Najniższa wartość",
+        "Highest value" => "Najwyższa wartość",
+        "Percent" => "Procent",
+        "Percentile" => "Percentyl",
+        "Formula" => "Formuła",
+        "Minimum" => "Minimum",
+        "Maximum" => "Maksimum",
+        "Midpoint" => "Punkt środkowy",
+        "More Rules…" => "Więcej reguł…",
+        "Select a Rule Type" => "Wybierz typ reguły",
+        "Edit the Rule Description" => "Edytuj opis reguły",
+        "Format only cells that contain" => "Formatuj tylko komórki zawierające",
+        "Format only top or bottom ranked values" => {
+            "Formatuj tylko wartości o najwyższej lub najniższej pozycji"
+        }
+        "Format only values that are above or below average" => {
+            "Formatuj tylko wartości powyżej lub poniżej średniej"
+        }
+        "Format only unique or duplicate values" => "Formatuj tylko wartości unikatowe lub zduplikowane",
+        "Use a formula to determine which cells to format" => {
+            "Użyj formuły do określenia, które komórki mają być formatowane"
+        }
+        "This rule type isn't available yet." => "Ten typ reguły nie jest jeszcze dostępny.",
         _ => return None,
     })
 }

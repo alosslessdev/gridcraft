@@ -416,6 +416,41 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Print" => "Yazdır",
         "Print What" => "Yazdırılacaklar",
         "Text Box" => "Metin Kutusu",
+        // Conditional formatting: colour scales.
+        "New Formatting Rule" => "Yeni Biçimlendirme Kuralı",
+        "Format all cells based on their values" => "Tüm hücreleri değerlerine göre biçimlendir",
+        "Format Style:" => "Biçim Stili:",
+        "2-Color Scale" => "2 Renkli Ölçek",
+        "3-Color Scale" => "3 Renkli Ölçek",
+        "Lowest value" => "En düşük değer",
+        "Highest value" => "En yüksek değer",
+        "Percent" => "Yüzde",
+        "Percentile" => "Yüzdebirlik",
+        "Formula" => "Formül",
+        "Minimum" => "Minimum",
+        "Maximum" => "Maksimum",
+        "Midpoint" => "Orta nokta",
+        "More Rules…" => "Diğer Kurallar…",
+        "Select a Rule Type" => "Kural Türü Seçin",
+        "Edit the Rule Description" => "Kural Açıklamasını Düzenle",
+        "Format only cells that contain" => "Yalnızca şunu içeren hücreleri biçimlendir",
+        "Format only top or bottom ranked values" => {
+            "Yalnızca en yüksek veya en düşük sıralamadaki değerleri biçimlendir"
+        }
+        "Format only values that are above or below average" => {
+            "Yalnızca ortalamanın üstündeki veya altındaki değerleri biçimlendir"
+        }
+        "Format only unique or duplicate values" => {
+            "Yalnızca benzersiz veya yinelenen değerleri biçimlendir"
+        }
+        "Use a formula to determine which cells to format" => {
+            "Hangi hücrelerin biçimlendirileceğini belirlemek için formül kullan"
+        }
+        "Format values where this formula is true:" => {
+            "Bu formülün doğru olduğu değerleri biçimlendir:"
+        }
+        "with" => "ile",
+        "This rule type isn't available yet." => "Bu kural türü henüz kullanılamıyor.",
         _ => return None,
     })
 }

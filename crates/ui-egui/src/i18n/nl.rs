@@ -527,6 +527,39 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Zoom In" => "Inzoomen",
         "Zoom Out" => "Uitzoomen",
         "Dismiss" => "Negeren",
+        // Conditional formatting: colour scales.
+        "New Formatting Rule" => "Nieuwe opmaakregel",
+        "Format all cells based on their values" => "Alle cellen opmaken op basis van hun waarden",
+        "Format Style:" => "Opmaakstijl:",
+        "2-Color Scale" => "Schaal met 2 kleuren",
+        "3-Color Scale" => "Schaal met 3 kleuren",
+        "Lowest value" => "Laagste waarde",
+        "Highest value" => "Hoogste waarde",
+        "Percent" => "Percentage",
+        "Percentile" => "Percentiel",
+        "Formula" => "Formule",
+        "Minimum" => "Minimum",
+        "Maximum" => "Maximum",
+        "Midpoint" => "Middelpunt",
+        "More Rules…" => "Meer regels…",
+        "Select a Rule Type" => "Een regeltype selecteren",
+        "Edit the Rule Description" => "De beschrijving van de regel bewerken",
+        "Format only cells that contain" => "Alleen cellen opmaken die bevatten",
+        "Format only top or bottom ranked values" => {
+            "Alleen waarden met een hoge of lage rangorde opmaken"
+        }
+        "Format only values that are above or below average" => {
+            "Alleen waarden boven of onder het gemiddelde opmaken"
+        }
+        "Format only unique or duplicate values" => "Alleen unieke of dubbele waarden opmaken",
+        "Use a formula to determine which cells to format" => {
+            "Een formule gebruiken om te bepalen welke cellen worden opgemaakt"
+        }
+        "Format values where this formula is true:" => {
+            "Waarden opmaken waarop deze formule waar is:"
+        }
+        "with" => "met",
+        "This rule type isn't available yet." => "Dit regeltype is nog niet beschikbaar.",
         _ => return None,
     })
 }

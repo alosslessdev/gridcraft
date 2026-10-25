@@ -1039,6 +1039,35 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Format Chart Area…" => "Formatare zonă diagramă…",
         "Error checking options" => "Opțiuni de verificare a erorilor",
         "Paste formulas that refer to the copied cells" => "Lipire formule care fac referire la celulele copiate",
+        // Conditional formatting: colour scales.
+        "New Formatting Rule" => "Regulă de formatare nouă",
+        "Format all cells based on their values" => "Formatați toate celulele în funcție de valorile lor",
+        "Format Style:" => "Stil de formatare:",
+        "2-Color Scale" => "Scară cu 2 culori",
+        "3-Color Scale" => "Scară cu 3 culori",
+        "Lowest value" => "Valoarea cea mai mică",
+        "Highest value" => "Valoarea cea mai mare",
+        "Percent" => "Procent",
+        "Percentile" => "Percentilă",
+        "Formula" => "Formulă",
+        "Minimum" => "Minim",
+        "Maximum" => "Maxim",
+        "Midpoint" => "Punct de mijloc",
+        "More Rules…" => "Mai multe reguli…",
+        "Select a Rule Type" => "Selectați un tip de regulă",
+        "Edit the Rule Description" => "Editați descrierea regulii",
+        "Format only cells that contain" => "Formatați numai celulele care conțin",
+        "Format only top or bottom ranked values" => {
+            "Formatați numai valorile clasate primele sau ultimele"
+        }
+        "Format only values that are above or below average" => {
+            "Formatați numai valorile peste sau sub medie"
+        }
+        "Format only unique or duplicate values" => "Formatați numai valorile unice sau duplicate",
+        "Use a formula to determine which cells to format" => {
+            "Utilizați o formulă pentru a stabili ce celule să fie formatate"
+        }
+        "This rule type isn't available yet." => "Acest tip de regulă nu este încă disponibil.",
         _ => return None,
     })
 }
