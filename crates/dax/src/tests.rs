@@ -389,7 +389,7 @@ fn malformed_input_reports_errors() {
 fn error_spans_point_at_the_problem() {
     let error = parse_expression("1 + )").unwrap_err();
     assert_eq!(error.span, Span::new(4, 5));
-    assert!(error.to_string().contains("bytes 4..5"), "{error}");
+    assert_eq!(error.to_string(), "expected expression, found `)` at bytes 4..5");
 
     let error = parse_expression("\"abc").unwrap_err();
     assert_eq!(error.span, Span::new(0, 4));
@@ -402,14 +402,14 @@ fn error_spans_point_at_the_problem() {
 fn nesting_and_input_length_are_bounded() {
     let deep = format!("{}1{}", "(".repeat(MAX_DEPTH + 4), ")".repeat(MAX_DEPTH + 4));
     let error = parse_expression(&deep).unwrap_err();
-    assert!(error.message.contains("nested too deeply"), "{}", error.message);
+    assert_eq!(error.message, format!("expression is nested too deeply (limit {MAX_DEPTH})"));
 
     let shallow = format!("{}1{}", "(".repeat(100), ")".repeat(100));
     assert_eq!(round_trip(&shallow), "1");
 
     let long = "1".repeat(MAX_INPUT_LEN + 1);
     let error = parse_expression(&long).unwrap_err();
-    assert!(error.message.contains("too long"), "{}", error.message);
+    assert_eq!(error.message, format!("input is too long ({} bytes, limit {MAX_INPUT_LEN})", MAX_INPUT_LEN + 1));
 
     let chain = vec!["1"; 1_000].join(" + ");
     assert!(chain.len() < MAX_INPUT_LEN);
