@@ -57,17 +57,21 @@ fn read_input(args: &[String]) -> Result<String, String> {
     Ok(text)
 }
 
-/// Queries are tried first; a malformed `EVALUATE`/`DEFINE` reports its query error instead of
-/// a misleading expression error.
+/// Queries are tried first; when the query parser fails, a valid expression is still accepted
+/// (`DEFINE` is a legal bare name), and the query diagnostic is kept only when both parsers fail
+/// for input that starts with a query keyword.
 fn parse_any(text: &str) -> Result<Parsed, String> {
     match parse_query(text) {
         Ok(query) => Ok(Parsed::Query(query)),
-        Err(query_error) => {
-            if starts_with_query_keyword(text) {
-                return Err(query_error.to_string());
+        Err(query_error) => match parse_expression(text) {
+            Ok(expr) => Ok(Parsed::Expression(expr)),
+            Err(expr_error) => {
+                if starts_with_query_keyword(text) {
+                    return Err(query_error.to_string());
+                }
+                Err(expr_error.to_string())
             }
-            parse_expression(text).map(Parsed::Expression).map_err(|e| e.to_string())
-        }
+        },
     }
 }
 
