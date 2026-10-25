@@ -266,6 +266,11 @@ fn dax_format_parse_and_errors() {
     assert_eq!(ok(&["dax", "format", "DEFINE"]).trim(), "DEFINE");
     assert!(ok(&["dax", "parse", "DEFINE"]).contains("Name"));
 
+    // A DAX text may open with a `--` line comment; it must reach the parser instead of being
+    // mistaken for a CLI option.
+    assert_eq!(ok(&["dax", "format", "-- note\n1 + 2"]).trim(), "1 + 2");
+    assert!(ok(&["dax", "parse", "-- note\n1 + 2"]).contains("Binary"));
+
     let o = run(&["dax", "format", "DEFINE MEASURE Sales[M] = 1"]);
     assert_eq!(o.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&o.stderr).contains("EVALUATE"));
