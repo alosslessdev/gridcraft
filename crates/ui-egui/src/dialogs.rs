@@ -1257,14 +1257,7 @@ pub(crate) fn build_params(d: &Dialog) -> Json {
                 "formula" => {
                     let formula = d.values.get("formula").and_then(Json::as_str).unwrap_or("").to_string();
                     let preset = d.values.get("preset").and_then(Json::as_str).unwrap_or("lightRedFillDarkRedText");
-                    let mut out = json!({"rule": {"type": "expression", "formula": formula, "preset": preset}});
-                    // The rule covers the range and sheet the dialog opened on, not whatever the
-                    // selection shows now.
-                    if let Some(pick) = d.pick.as_ref().filter(|pick| !pick.applies_to.is_empty() && !pick.sheet.is_empty()) {
-                        out["sheet"] = json!(pick.sheet.as_str());
-                        out["range"] = json!(pick.applies_to);
-                    }
-                    out
+                    json!({"rule": {"type": "expression", "formula": formula, "preset": preset}})
                 }
                 _ => {
                     let stops: Vec<Json> =
@@ -1272,6 +1265,15 @@ pub(crate) fn build_params(d: &Dialog) -> Json {
                     json!({"rule": {"type": "colorScale", "stops": stops}})
                 }
             };
+            // The rule covers the sheet and range the dialog opened on, not whatever the
+            // selection shows now: a formula rule's pick box holds the same opening scope, and
+            // colour scales have no pick box but need it just as much to edit in place.
+            let sheet = d.values.get("sheet").and_then(Json::as_str).unwrap_or_default();
+            let applies_to = d.values.get("applies_to").and_then(Json::as_str).unwrap_or_default();
+            if !sheet.is_empty() && !applies_to.is_empty() {
+                out["sheet"] = json!(sheet);
+                out["range"] = json!(applies_to);
+            }
             if let Some(edit) = d.values.get("edit").and_then(Json::as_u64) {
                 out["edit"] = json!(edit);
             }
@@ -3841,13 +3843,17 @@ mod tests {
     }
 
     #[test]
-    fn colour_scale_rule_does_not_take_grid_references() {
+    fn colour_scale_rule_keeps_the_opening_range_without_grid_references() {
         let mut session = gridcraft_engine::Session::default();
         session.new_workbook();
         session.execute("selection.set", json!({"range": "B2:C5"})).unwrap();
         let mut app = SheetApp::new(session, Default::default());
+        let sheet = app.session.active().unwrap().wb.active().unwrap().name.clone();
         let d = Dialog::open(&mut app, "newFormattingRule", json!({})).unwrap();
         assert!(!d.picks_references());
-        assert!(build_params(&d).get("range").is_none());
+        // No pick box, but the rule still covers the range and sheet the dialog opened on.
+        let params = build_params(&d);
+        assert_eq!(params["sheet"], sheet.as_str());
+        assert_eq!(params["range"], "B2:C5");
     }
 }

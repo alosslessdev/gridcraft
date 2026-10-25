@@ -48,9 +48,18 @@ fn creates_a_three_colour_scale_with_per_stop_thresholds() {
         ]),
     );
     h.run_steps(2);
+    // The rule covers the sheet and range the dialog opened on, not the one shown at OK.
+    h.state_mut().run("home.insertSheet", json!({"name": "Two"})).unwrap();
+    h.state_mut().run("selection.set", json!({"range": "B1:B2"})).unwrap();
+    h.run_steps(2);
     h.get_by_label("   OK   ").click();
     h.run_steps(6);
     assert!(h.state().dialog.is_none());
+    let two = h.state_mut().run("home.manageRules", json!({"sheet": "Two"})).unwrap();
+    assert_eq!(two["rules"].as_array().map(Vec::len), Some(0), "the rule does not land on the sheet shown at OK");
+    let list = h.state_mut().run("home.manageRules", json!({"sheet": "Sheet1"})).unwrap();
+    assert_eq!(list["rules"][0]["ranges"], json!(["A1:A3"]));
+    h.state_mut().run("sheet.activate", json!({"sheet": "Sheet1"})).unwrap();
     assert_eq!(
         stops(&h),
         vec![

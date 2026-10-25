@@ -1631,7 +1631,9 @@ fn cf_rule(rule: &Json, cmd: &str) -> Result<CfRule> {
         }
         "timePeriod" => Ok(CfRule::TimePeriod { period: g("period").unwrap_or_else(|| "today".into()), style }),
         "colorScale" => {
-            let stops = if let Some(list) = rule.get("stops").and_then(Json::as_array) {
+            let stops = if let Some(stops) = rule.get("stops") {
+                // A present but misshapen `stops` is a mistake, not a request for `colors`.
+                let list = stops.as_array().ok_or_else(|| bad(cmd, "`stops` must be an array"))?;
                 let mut out = Vec::with_capacity(list.len().min(3));
                 for stop in list {
                     let color = super::format::color_param(stop.get("color")).ok_or_else(|| bad(cmd, "a colour-scale stop needs a colour"))?;
@@ -1736,9 +1738,12 @@ fn manage_cf(s: &mut Session, p: &Json) -> Result<Json> {
         (Some(_), None) => return Err(bad("home.manageRules", "missing `rule` for an edit")),
         (Some(e), Some(rule)) => {
             let i = e.as_u64().ok_or_else(|| bad("home.manageRules", "`edit` must be a rule index"))?;
+            // A number too large for `usize` on this target names no rule: casting it would
+            // wrap to a real index and replace that rule instead of reporting out of range.
+            let i = usize::try_from(i).map_err(|_| bad("home.manageRules", format!("no conditional format at index {i}")))?;
             let rule = cf_rule(rule, "home.manageRules")?;
             check_cf_rule("home.manageRules", &rule)?;
-            Some((i as usize, rule))
+            Some((i, rule))
         }
     };
     edit(s, |cx| {
@@ -1921,6 +1926,23 @@ mod tests {
     }
 
     #[test]
+    fn colour_scale_rejects_a_stops_value_that_is_not_an_array() {
+        let mut s = Session::new();
+        s.new_workbook();
+        // `stops` present but misshapen used to fall back to the default scale instead of erroring.
+        for stops in [json!({}), json!(null), json!("min")] {
+            let err = s
+                .execute("home.conditionalFormat", json!({"range": "A1:A3", "rule": {"type": "colorScale", "stops": stops}}))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("home.conditionalFormat"), "{err}");
+            assert!(err.contains("`stops` must be an array"), "{err}");
+        }
+        let rules = s.execute("home.manageRules", json!({})).unwrap();
+        assert_eq!(rules["rules"].as_array().map(Vec::len), Some(0), "an invalid `stops` creates no rule");
+    }
+
+    #[test]
     fn colour_scale_formulas_are_stored_verbatim() {
         let mut s = Session::new();
         s.new_workbook();
@@ -1968,6 +1990,21 @@ mod tests {
         assert!(err.contains("index 1"), "{err}");
         let rules = s.execute("home.manageRules", json!({})).unwrap();
         assert_eq!(rules["rules"].as_array().map(Vec::len), Some(1), "the failed edit leaves the rule alone");
+    }
+
+    #[test]
+    fn manage_rules_rejects_an_edit_index_that_does_not_fit_a_usize() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("home.conditionalFormat", json!({"range": "A1:A3", "rule": {"type": "expression", "formula": "A1>2"}})).unwrap();
+        // On a 32-bit target this used to cast to zero and replace the rule at index 0.
+        let err =
+            s.execute("home.manageRules", json!({"edit": 4294967296u64, "rule": {"type": "expression", "formula": "A1>3"}})).unwrap_err().to_string();
+        assert!(err.contains("home.manageRules"), "{err}");
+        assert!(err.contains("index 4294967296"), "{err}");
+        let rule: CfRule = serde_json::from_value(s.execute("home.manageRules", json!({})).unwrap()["rules"][0]["rule"].clone()).unwrap();
+        let CfRule::Expression { formula, .. } = rule else { panic!("expected a formula rule, got {rule:?}") };
+        assert_eq!(formula, "A1>2", "the failed edit leaves the rule alone");
     }
 
     #[test]
