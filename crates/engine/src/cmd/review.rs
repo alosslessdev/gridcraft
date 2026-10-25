@@ -541,9 +541,13 @@ fn audit_calculation(s: &mut Session, p: &Json) -> Result<Json> {
                     }
                 }
                 Expr::Struct(sr) => {
-                    let all_columns =
-                        sr.col_start.is_none() && sr.col_end.is_none() && sr.specifiers.iter().all(|item| matches!(item, StructItem::Data));
-                    if all_columns || sr.specifiers.iter().any(|item| matches!(item, StructItem::All)) {
+                    // Only a reference with no column bounds covers the whole table: `Data[[#All],[Amount]]`
+                    // scans one column, so it is no whole-table reference.
+                    let whole_table = sr.col_start.is_none()
+                        && sr.col_end.is_none()
+                        && (sr.specifiers.iter().all(|item| matches!(item, StructItem::Data))
+                            || sr.specifiers.iter().any(|item| matches!(item, StructItem::All)));
+                    if whole_table {
                         let mut label = if sr.table.is_empty() { "table".to_string() } else { sr.table.clone() };
                         label.push_str(if sr.specifiers.iter().any(|item| matches!(item, StructItem::All)) { "[#All]" } else { "[all columns]" });
                         push_unique(&mut tables, label);
@@ -1144,6 +1148,21 @@ mod tests {
         let oversized = r["issues"].as_array().unwrap().iter().find(|i| i["category"] == "oversizedRange").unwrap();
         assert_eq!(oversized["cell"], "A200");
         assert_eq!(oversized["references"], json!(["A1:XFC62"]));
+    }
+
+    #[test]
+    fn audit_calculation_leaves_column_scoped_all_references_out_of_whole_table() {
+        let mut s = Session::new();
+        s.new_workbook();
+        s.execute("range.setValues", json!({"range": "A1:B3", "values": [["Amount", "Qty"], [1, 2], [3, 4]]})).unwrap();
+        s.execute("insert.table", json!({"range": "A1:B3", "name": "Data", "header": true})).unwrap();
+        s.execute("cell.set", json!({"cell": "E1", "input": "=SUM(Data[#All])"})).unwrap();
+        // `[[#All],[Amount]]` scans one column, so it is no whole-table reference.
+        s.execute("cell.set", json!({"cell": "E2", "input": "=SUM(Data[[#All],[Amount]])"})).unwrap();
+        let r = s.execute("review.auditCalculation", json!({})).unwrap();
+        assert_eq!(category_count(&r, "wholeTableReference"), 1);
+        let table = r["issues"].as_array().unwrap().iter().find(|i| i["category"] == "wholeTableReference").unwrap();
+        assert_eq!(table["cell"], "E1");
     }
 
     #[test]
