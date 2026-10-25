@@ -56,5 +56,7 @@ fn a_launcher_is_named_and_opens_its_groups_dialog() {
     assert!(rect.left() > font.right(), "the launcher clears the caption: caption {font:?}, launcher {rect:?}");
     launcher.click();
     h.run_steps(2);
-    assert!(h.state().dialog.is_some(), "a dialog launcher in the caption band opens a dialog");
+    // Not just any dialog: the launcher has to open its own group's form, on the Font tab.
+    let dialog = h.state().dialog.as_ref().expect("a dialog launcher in the caption band opens a dialog");
+    assert_eq!((dialog.name.as_str(), dialog.tab.as_str()), ("formatCells", "Font"), "the Font launcher opens Format Cells on Font");
 }
