@@ -4854,6 +4854,22 @@ fn journal_is_capped_by_serialized_size() {
 }
 
 #[test]
+fn a_script_recorded_with_ink_to_shape_off_replays_its_strokes_as_ink() {
+    let mut s = s();
+    // Recorded with the mode off, so its strokes were drawn as ink: a replay in a session where
+    // the mode is on must not convert them.
+    s.execute("automate.recordActions", json!({})).unwrap();
+    let pts = [[100.0, 100.0], [180.0, 100.0], [180.0, 172.0], [100.0, 172.0], [100.0, 100.0]];
+    assert_eq!(s.execute("draw.stroke", json!({"points": pts})).unwrap()["kind"], "Ink");
+    s.execute("automate.recordActions", json!({"stop": true, "name": "Ink off"})).unwrap();
+    s.execute("draw.inkToShape", json!({"on": true})).unwrap();
+    assert_eq!(s.execute("automate.runScript", json!({"name": "Ink off"})).unwrap()["ran"], 2);
+    let sheet = s.doc().unwrap().wb.active().unwrap().clone();
+    assert_eq!(sheet.shapes.len(), 2);
+    assert_eq!(sheet.shapes[1].kind, gridcraft_model::ShapeKind::Ink, "the replay converted a stroke that was drawn as ink");
+}
+
+#[test]
 fn recording_keeps_its_steps_when_the_journal_is_trimmed() {
     let mut s = s();
     for _ in 0..9_990 {
@@ -4865,7 +4881,8 @@ fn recording_keeps_its_steps_when_the_journal_is_trimmed() {
         s.execute("cell.set", json!({"cell": "B1", "input": format!("step{i}")})).unwrap();
     }
     let r = s.execute("automate.recordActions", json!({"stop": true, "name": "Steps"})).unwrap();
-    assert_eq!(r["steps"], 20, "{r}");
+    // The twenty typed steps plus the Ink to Shape mode the script opens with.
+    assert_eq!(r["steps"], 21, "{r}");
     let script = s.doc().unwrap().wb.names.iter().find(|n| n.name == "_sc_scripts").map(|n| n.formula.clone()).unwrap();
     assert!(script.contains("step0") && script.contains("step19") && !script.contains("selection.set"), "{script}");
 }

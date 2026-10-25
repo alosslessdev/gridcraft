@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last reviewed:** 2026-10-10 · ** Last updated:** 2026-10-24 · **Change:** minor (engine building blocks for multi-command actions) · **Target:** Microsoft Excel (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · ** Last updated:** 2026-10-25 · **Change:** trivial (recorded scripts restore the Ink to Shape mode they were recorded with, on or off) · **Target:** Microsoft Excel (Microsoft 365)
 
 How GridCraft is built today. Rules for contributors are in [`AGENTS.md`](../AGENTS.md).
 
@@ -105,8 +105,9 @@ Actions made of many commands (macros, a debugger that runs one step per call) u
   Commands run by other commands are not recorded, nor is a menu-style call that only opened a
   dialog (the dialog's confirming call is the step), and the buffer is independent of the journal
   (Automate › Record Actions still records through the journal). Because Draw ▸ Ink to Shape is
-  state rather than a step, Record Actions started with the mode on saves that as the script's
-  first step, so the recorded strokes convert again when the script is played back.
+  state rather than a step, Record Actions saves the mode it started with as the script's first
+  step, on or off, so the recorded strokes are converted — or left as ink — the same way when the
+  script is played back.
 - **Document trust.** `DocState::trust` is `Local` for workbooks made in the session and
   `FromFile` for workbooks opened from a file. `Trust` has no default: `DocState::new` takes it,
   so every way of making a document says where its content came from. It is also `FromFile` for
@@ -152,6 +153,7 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | trivial | Recorded scripts restore the Ink to Shape mode they were recorded with, on or off, so a replay never converts a stroke that was drawn as ink |
 | 2026-10-24 | minor | Engine building blocks for multi-command actions: undo groups, recording buffer, document trust, chunked hidden-name storage |
 | 2026-10-14 | minor | Document Undo's retained-cell-storage budget and latest-step guarantee |
 | 2026-10-10 | major | Created from the code on main: crates, layers, data flow, agent control, known gaps |

@@ -927,7 +927,8 @@ fn record_actions_is_unchanged_by_the_buffer() {
     assert!(!s.is_recording());
     set(&mut s, "A1", "typed");
     let r = s.execute("automate.recordActions", json!({"stop": true, "name": "Typed"})).unwrap();
-    assert_eq!(r["steps"], 1);
+    // The typed cell plus the Ink to Shape mode the script opens with.
+    assert_eq!(r["steps"], 2);
     assert!(s.recorder.is_none());
 }
 
