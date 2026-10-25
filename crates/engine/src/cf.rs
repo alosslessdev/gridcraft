@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use gridcraft_core::{CellRef, RangeRef, Value, compare};
-use gridcraft_model::{CfOperator, CfRule, CfValueKind, Color, CondFormat, PatternType, Sheet, Style, Underline, Workbook, default_icon_thresholds};
+use gridcraft_model::{CfOperator, CfRule, CfValueKind, Color, CondFormat, Sheet, Style, Underline, Workbook, default_icon_thresholds};
 
 /// The conditional look of one cell.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -398,6 +398,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use gridcraft_model::PatternType;
 
     #[test]
     fn every_matching_rule_applies() {
