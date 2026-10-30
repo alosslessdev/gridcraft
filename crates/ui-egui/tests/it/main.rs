@@ -64,6 +64,7 @@ mod macro_editor;
 mod macros_ui;
 mod menu_hover;
 mod merged_cells;
+mod model_pivot_pane;
 mod more_colors;
 mod native_print;
 mod nowrap_line_breaks;
