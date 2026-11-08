@@ -9,10 +9,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gridcraft_ink::{Manifest, ModelFile, Recognizer, TROCR_SMALL_HANDWRITTEN};
+use gridcraft_ink::{Manifest, ModelFile, PIX2TEXT_MFR, Recognizer, TROCR_SMALL_HANDWRITTEN};
 use gridcraft_ui_egui::ModelHost;
 
-/// The desktop's [`ModelHost`]: a download per model id, plus the recognizer loader the UI hooks
+/// The desktop's [`ModelHost`]: a download per model id, plus the recognizer loaders the UI hooks
 /// up to the engine session.
 #[derive(Default)]
 pub struct Models;
@@ -22,17 +22,21 @@ impl Models {
         Models
     }
 
-    /// The model root the app uses: the first root that holds the model, else where a download
+    /// The model root the app uses: the first root that holds a model, else where a download
     /// belongs (`$GRIDCRAFT_MODELS` when set, otherwise the settings folder's `models/`). The
     /// same order every Craft app uses.
     pub fn root() -> PathBuf {
-        gridcraft_ink::root_for(TROCR_SMALL_HANDWRITTEN.id).unwrap_or_else(|| PathBuf::from("models"))
+        gridcraft_ink::resolve_root(TROCR_SMALL_HANDWRITTEN.id)
+            .or_else(|| gridcraft_ink::resolve_root(PIX2TEXT_MFR.id))
+            .or_else(gridcraft_ink::install_root)
+            .unwrap_or_else(|| PathBuf::from("models"))
     }
 
     /// The manifest for `id`, or why this app doesn't know it.
     fn manifest(id: &str) -> Result<&'static Manifest, String> {
         match id {
             id if id == TROCR_SMALL_HANDWRITTEN.id => Ok(&TROCR_SMALL_HANDWRITTEN),
+            id if id == PIX2TEXT_MFR.id => Ok(&PIX2TEXT_MFR),
             other => Err(format!("Unknown model `{other}`.")),
         }
     }
@@ -129,6 +133,12 @@ fn copy_capped(reader: &mut dyn Read, dest: &Path, limit: u64, url: &str) -> Res
 /// worker thread: it hashes about 250 MB and parses both ONNX graphs.
 pub fn load_recognizer(root: &Path) -> Result<Arc<dyn Recognizer>, String> {
     Ok(Arc::new(gridcraft_ink_rten::RtenRecognizer::load(root).map_err(|e| e.to_string())?))
+}
+
+/// Builds the Ink to Math recognizer from a model root (the UI's `Services::math_loader`). Runs
+/// on a worker thread: it hashes about 112 MB and parses both ONNX graphs.
+pub fn load_math_recognizer(root: &Path) -> Result<Arc<dyn Recognizer>, String> {
+    Ok(Arc::new(gridcraft_ink_rten::RtenRecognizer::load_math(root).map_err(|e| e.to_string())?))
 }
 
 #[cfg(test)]

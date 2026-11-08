@@ -1,35 +1,40 @@
-//! GridCraft Action Pen inference: TrOCR small (handwritten) run by `rten`.
+//! GridCraft ink inference on `rten`: TrOCR small (handwritten) for the Action Pen, and Pix2Text
+//! MFR for Draw › Convert › Ink to Math.
 //!
-//! The model is a standard encoder/decoder export (`Xenova/trocr-small-handwritten`, MIT) with a
-//! SentencePiece unigram tokenizer. Nothing is bundled: [`RtenRecognizer::load`] verifies the
-//! files against [`gridcraft_ink::TROCR_SMALL_HANDWRITTEN`] and reads them from the model
-//! directory, which the person downloaded into or filled by hand (see `docs/action-pen.md`).
+//! Both models are standard encoder/decoder exports with the same graph shape — encoder
+//! `pixel_values` → `last_hidden_state`; decoder `input_ids` + `encoder_hidden_states` →
+//! `logits`, no key/value cache — a 384 × 384 RGB input normalised with mean/std 0.5 and their
+//! own tokenizer. [`RtenRecognizer::load`] serves the Action Pen (`Xenova/trocr-small-handwritten`,
+//! MIT) and [`RtenRecognizer::load_math`] Ink to Math (`breezedeus/pix2text-mfr`, MIT); each
+//! verifies its files against the matching [`gridcraft_ink::Manifest`] and reads them from the
+//! model directory the person downloaded into or filled by hand (see `docs/action-pen.md` and
+//! `docs/ink-to-math.md`).
 //!
 //! This crate is native only (`crates/ink-rten` sits at layer 6, so `cargo xtask wasm` skips it):
 //! `rten` reads model files with the standard library and is not built for the web app.
 //!
-//! Inference is greedy decoding, one line at a time: start token [`START`], stop at [`EOS`]. A
-//! line that reaches [`MAX_STEPS`] tokens without one does not fit the model's input and is a
-//! [`Error::Recognize`], never truncated text. On this machine one line takes about 0.27 s (CPU,
-//! release).
+//! Inference is greedy decoding, one line at a time: the tokenizer's start token, stop at its end
+//! token. A line that reaches the manifest's step cap without one does not fit the model's input
+//! and is a [`Error::Recognize`], never truncated text. On this machine one line of handwriting
+//! takes about 0.27 s (CPU, release).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
 use std::path::Path;
 
-use gridcraft_ink::{Error, IMAGE_SIZE, LineImage, Manifest, Recognizer, TROCR_SMALL_HANDWRITTEN};
+use gridcraft_ink::{Error, IMAGE_SIZE, LineImage, Manifest, PIX2TEXT_MFR, RecognitionOutput, Recognizer, TROCR_SMALL_HANDWRITTEN};
 use tokenizers::Tokenizer;
 
-/// TrOCR's decoder start token (`</s>`, id 2 in this export).
+/// TrOCR's decoder start token (`</s>`, id 2 in that export); used when a tokenizer names none.
 pub const START: i32 = 2;
-/// End of the line.
+/// End of the line (`</s>` in both exports).
 pub const EOS: i32 = 2;
-/// Padding, never emitted by a decode step.
+/// TrOCR's padding token (`<pad>`, id 1 in that export); used when a tokenizer names none.
 pub const PAD: i32 = 1;
-/// Longest line, in tokens, including the stop token's step.
-pub const MAX_STEPS: usize = 32;
+/// Longest line the handwriting model decodes, in tokens, including the stop token's step.
+pub const MAX_STEPS: usize = TROCR_SMALL_HANDWRITTEN.max_steps;
 
-/// The TrOCR small recognizer, loaded from a model directory.
+/// The recognizer, loaded from a model directory.
 pub struct RtenRecognizer {
     encoder: rten::Model,
     decoder: rten::Model,
@@ -37,30 +42,38 @@ pub struct RtenRecognizer {
     encoder_node: rten::NodeId,
     logits_node: rten::NodeId,
     /// The model's own tokenizer: its `decode` is the reference detokenisation (SentencePiece
-    /// unigram, `▁` as the space marker), so ids turn into text exactly as the model card's
-    /// pipeline does.
+    /// unigram for TrOCR, ByteLevel BPE for Pix2Text MFR), so ids turn into text exactly as the
+    /// model card's pipeline does.
     tokenizer: Tokenizer,
     id: &'static str,
+    /// The decoder's start, stop and padding ids, read from the tokenizer so each export's own
+    /// vocabulary governs (the two models number `<pad>` differently).
+    start: i32,
+    eos: i32,
+    pad: i32,
+    /// The manifest's step cap: a longer answer is refused, never truncated.
+    max_steps: usize,
+    output: RecognitionOutput,
 }
 
-/// Greedy decoding: asks `next` for a token until it emits [`EOS`] (or [`PAD`], which a decode
-/// step should not emit), appending each token to `ids` and returning what it produced.
+/// Greedy decoding: asks `next` for a token until it emits `eos` (or `pad`, which a decode step
+/// should not emit), appending each token to `ids` and returning what it produced.
 ///
-/// Reaching [`MAX_STEPS`] without a stop token means the writing does not fit one line. The
-/// tokens so far are a prefix of the real text, so returning them would type a truncated value
-/// into the cell: this is an error instead.
-fn greedy(mut next: impl FnMut(&[i32]) -> Result<i32, Error>, ids: &mut Vec<i32>) -> Result<Vec<i32>, Error> {
+/// Reaching `max_steps` without a stop token means the writing does not fit one line. The tokens
+/// so far are a prefix of the real answer, so returning them would insert a truncated value:
+/// this is an error instead.
+fn greedy(mut next: impl FnMut(&[i32]) -> Result<i32, Error>, ids: &mut Vec<i32>, max_steps: usize, eos: i32, pad: i32) -> Result<Vec<i32>, Error> {
     let mut produced = Vec::new();
-    for _ in 0..MAX_STEPS {
+    for _ in 0..max_steps {
         let token = next(ids)?;
-        if token == EOS || token == PAD {
+        if token == eos || token == pad {
             return Ok(produced);
         }
         ids.push(token);
         produced.push(token);
     }
     Err(Error::Recognize(format!(
-        "The handwriting is too long to recognise in one entry: the model reached its limit of {MAX_STEPS} tokens. Write less at a time."
+        "The writing is too long to recognise in one entry: the model reached its limit of {max_steps} tokens. Write less at a time."
     )))
 }
 
@@ -69,6 +82,11 @@ impl RtenRecognizer {
     /// `<root>/trocr-small-handwritten`).
     pub fn load(root: &Path) -> Result<Self, Error> {
         Self::from_manifest(root, &TROCR_SMALL_HANDWRITTEN)
+    }
+
+    /// Loads the Ink to Math model from `root` (`<root>/pix2text-mfr`).
+    pub fn load_math(root: &Path) -> Result<Self, Error> {
+        Self::from_manifest(root, &PIX2TEXT_MFR)
     }
 
     /// Loads the model `manifest` describes from `root`, verifying every file's size and SHA-256
@@ -93,12 +111,30 @@ impl RtenRecognizer {
         if tokenizer.get_vocab_size(true) < 4 {
             return Err(Error::Corrupt("the tokenizer has no vocabulary".into()));
         }
-        Ok(RtenRecognizer { encoder, decoder, ids_node, encoder_node, logits_node, tokenizer, id: manifest.id })
+        // Each export numbers its special tokens itself: TrOCR's `<pad>` is 1, Pix2Text MFR's is
+        // 0. Read them from the tokenizer the model ships with, and fall back only when an
+        // export leaves them unnamed.
+        let token_id = |name: &str, fallback: i32| tokenizer.token_to_id(name).and_then(|i| i32::try_from(i).ok()).unwrap_or(fallback);
+        let (start, eos, pad) = (token_id("</s>", START), token_id("</s>", EOS), token_id("<pad>", PAD));
+        Ok(RtenRecognizer {
+            encoder,
+            decoder,
+            ids_node,
+            encoder_node,
+            logits_node,
+            tokenizer,
+            id: manifest.id,
+            start,
+            eos,
+            pad,
+            max_steps: manifest.max_steps,
+            output: manifest.output,
+        })
     }
 
     /// One decode step's token: the highest-scoring id at the last position.
     fn next_token(&self, ids: &[i32], encoder: &rten::Value) -> Result<i32, Error> {
-        let len = ids.len().clamp(1, MAX_STEPS + 1);
+        let len = ids.len().clamp(1, self.max_steps + 1);
         let input_ids = rten::Value::from_shape([1usize, len], ids.to_vec()).map_err(|e| Error::Recognize(format!("input ids: {e}")))?;
         let outs = self
             .decoder
@@ -151,8 +187,8 @@ impl RtenRecognizer {
         let tensor = rten::Value::from_shape([1usize, 3, IMAGE_SIZE, IMAGE_SIZE], input.to_vec())
             .map_err(|e| Error::Recognize(format!("input image: {e}")))?;
         let encoder = self.encoder.run_one(rten::ValueOrView::Value(tensor), None).map_err(|e| Error::Recognize(format!("encoder: {e}")))?;
-        let mut ids: Vec<i32> = vec![START];
-        let produced = greedy(|ids| self.next_token(ids, &encoder), &mut ids)?;
+        let mut ids: Vec<i32> = vec![self.start];
+        let produced = greedy(|ids| self.next_token(ids, &encoder), &mut ids, self.max_steps, self.eos, self.pad)?;
         self.decode(&produced)
     }
 }
@@ -168,6 +204,10 @@ impl Recognizer for RtenRecognizer {
     fn model_id(&self) -> &'static str {
         self.id
     }
+
+    fn output(&self) -> RecognitionOutput {
+        self.output
+    }
 }
 
 #[cfg(test)]
@@ -178,7 +218,7 @@ mod tests {
     fn a_line_that_hits_the_step_limit_is_an_error_not_truncated_text() {
         // A model that never emits a stop token: the line does not fit, so decoding fails.
         let mut ids = vec![START];
-        let endless = greedy(|_| Ok(7), &mut ids);
+        let endless = greedy(|_| Ok(7), &mut ids, MAX_STEPS, EOS, PAD);
         assert!(matches!(endless, Err(Error::Recognize(_))), "{endless:?}");
         assert_eq!(ids.len(), 1 + MAX_STEPS, "every token was consumed before failing");
 
@@ -191,10 +231,22 @@ mod tests {
                 Ok(if asked == 3 { EOS } else { 7 })
             },
             &mut ids,
+            MAX_STEPS,
+            EOS,
+            PAD,
         )
         .expect("the stop token ends the decode");
         assert_eq!(produced, vec![7, 7]);
         assert_eq!(ids, vec![START, 7, 7]);
+
+        // A formula's cap is its own manifest's, and the pads differ between the exports: the
+        // Pix2Text tokenizer numbers `<pad>` 0, TrOCR's 1.
+        let mut ids = vec![START];
+        let endless = greedy(|_| Ok(7), &mut ids, PIX2TEXT_MFR.max_steps, EOS, 0);
+        assert!(matches!(endless, Err(Error::Recognize(_))), "{endless:?}");
+        assert_eq!(ids.len(), 1 + PIX2TEXT_MFR.max_steps);
+        let mut ids = vec![START];
+        assert_eq!(greedy(|_| Ok(0), &mut ids, PIX2TEXT_MFR.max_steps, EOS, 0).expect("pad ends the decode"), Vec::<i32>::new());
     }
 
     /// The model directory when this machine has one (never committed, so CI skips these

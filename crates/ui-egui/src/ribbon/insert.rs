@@ -309,4 +309,41 @@ pub(super) fn draw(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         act(app, "draw.inkToShape", json!({}));
     }
+    // Ink to Math works on the selected ink, so it is enabled only while a stroke is selected.
+    let ink = selected_ink(app);
+    let math = ui
+        .add_enabled_ui(ink.is_some(), |ui| {
+            big_button(ui, Icon::Equation, "Ink to\nMath", "Turn the selected ink into an equation (needs the math model)", false)
+        })
+        .inner;
+    control_keytip(app, ui, &math, "draw.inkToMath");
+    if math.clicked()
+        && let Some(id) = ink
+    {
+        if !crate::inkpanel::math_ready(app) {
+            // No model: the button opens the download/import panel instead of doing nothing.
+            crate::inkpanel::open(app);
+        } else {
+            match app.run("draw.inkToMath", json!({"ids": [id]})) {
+                Ok(r) => {
+                    // The ink is gone; select the equation it became, as Excel does.
+                    if let Some(equation) = r["equation"].as_u64().and_then(|v| u32::try_from(v).ok()) {
+                        app.selected_object = Some(gridcraft_engine::model::ObjRef::new(gridcraft_engine::model::ObjKind::Equation, equation));
+                    }
+                }
+                Err(e) => app.alert(e),
+            }
+        }
+    }
+}
+
+/// The ink stroke the sheet has selected, if the selection is one. Draw › Convert › Ink to Math
+/// works on ink, so its button is enabled only then.
+fn selected_ink(app: &SheetApp) -> Option<u32> {
+    let selected = app.selected_object?;
+    if selected.kind != gridcraft_engine::model::ObjKind::Shape {
+        return None;
+    }
+    let d = app.session.active()?;
+    d.wb.active()?.shapes.iter().find(|s| s.id == selected.id && s.kind == gridcraft_engine::model::ShapeKind::Ink).map(|s| s.id)
 }

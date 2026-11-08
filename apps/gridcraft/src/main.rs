@@ -209,9 +209,10 @@ fn services() -> Services {
         // and the recognizer loader. Models never ship; see docs/action-pen.md.
         models: Some(Arc::new(ink_host::Models::new())),
         ink_loader: Some(Arc::new(ink_host::load_recognizer)),
+        math_loader: Some(Arc::new(ink_host::load_math_recognizer)),
         pick_model_files: Some(Box::new(|| {
             rfd::FileDialog::new()
-                .add_filter("Handwriting model files", &["onnx", "json"])
+                .add_filter("Model files (ONNX, tokenizer)", &["onnx", "json"])
                 .pick_files()
                 .unwrap_or_default()
                 .into_iter()

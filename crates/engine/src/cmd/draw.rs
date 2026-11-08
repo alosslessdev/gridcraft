@@ -1,15 +1,18 @@
-//! Draw tab: pen and eraser tools, ink strokes, Ink to Shape, and the Action Pen (handwriting to
-//! text; the model and the recognizer are described in `docs/action-pen.md`).
+//! Draw tab: pen and eraser tools, ink strokes, Ink to Shape, Ink to Math, and the Action Pen
+//! (handwriting to text). The handwriting and math models and their recognizers are described in
+//! `docs/action-pen.md` and `docs/ink-to-math.md`.
 
 use gridcraft_core::CellRef;
-use gridcraft_ink::{Accelerator, InstallState, ModelFile, TROCR_SMALL_HANDWRITTEN};
-use gridcraft_model::{Anchor, Color, Shape, ShapeKind};
+use gridcraft_ink::{Accelerator, InstallState, Manifest, ModelFile, PIX2TEXT_MFR, RecognitionOutput, TROCR_SMALL_HANDWRITTEN};
+use gridcraft_model::{Anchor, AnchorMode, Color, Shape, ShapeKind};
 use serde_json::{Value as Json, json};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::{
-    CommandSpec, EngineError, Result, Session, always, bad, bool_param, cell_param_on, cmd, edit, f64_param, has_doc, ok, str_param, u32_param,
+    CommandSpec, EngineError, PROTECTED, Result, Session, always, bad, bool_param, cell_param_on, cmd, edit, f64_param, has_doc, ok, str_param,
+    u32_param,
 };
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -44,6 +47,15 @@ pub fn specs() -> Vec<CommandSpec> {
             ink_status
         ),
         cmd!(
+            query "ink.mathStatus",
+            "Math Model",
+            [],
+            None,
+            "{} reports whether the Ink to Math model is installed, where it goes, its licence and size",
+            always,
+            math_status
+        ),
+        cmd!(
             query "ink.modelImport",
             "Import Handwriting Model",
             [],
@@ -69,6 +81,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{id?} converts an ink stroke (default: the last) into a rectangle, ellipse, triangle or line",
             has_doc,
             ink_to_shape
+        ),
+        cmd!(
+            "draw.inkToMath",
+            "Ink to Math",
+            ["Draw", "Convert"],
+            None,
+            "{id?|ids?: [id], points?: [[x,y],…] or [[[x,y],…],…]} turns the selected ink into an equation (needs the math model, ink.mathStatus)",
+            has_doc,
+            ink_to_math
         ),
     ]
 }
@@ -98,13 +119,13 @@ fn eraser(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(json!({"tool": s.draw_tool}))
 }
 
-// ---------------------------------------------------------------- Action Pen
+// ---------------------------------------------------------------- models
 
-/// Where the handwriting model's files go, as a person would see it.
-fn model_directory(s: &Session) -> String {
+/// Where `manifest`'s files go, as a person would see it.
+fn model_directory(s: &Session, manifest: &Manifest) -> String {
     match s.models_dir.as_deref() {
-        Some(root) => TROCR_SMALL_HANDWRITTEN.dir(Path::new(root)).display().to_string(),
-        None => format!("<models>/{}/ (open Draw › Action Pen in the desktop app)", TROCR_SMALL_HANDWRITTEN.id),
+        Some(root) => manifest.dir(Path::new(root)).display().to_string(),
+        None => format!("<models>/{}/ (open Draw › Action Pen in the desktop app)", manifest.id),
     }
 }
 
@@ -114,7 +135,19 @@ fn no_recognizer(s: &Session, cmd: &'static str) -> EngineError {
         cmd,
         format!(
             "The handwriting model is not installed, so the Action Pen is unavailable. Download it from Draw › Action Pen, or copy its files into {}.",
-            model_directory(s)
+            model_directory(s, &TROCR_SMALL_HANDWRITTEN)
+        ),
+    )
+}
+
+/// The error `draw.inkToMath` gives when the math model is not installed: the same structured,
+/// actionable shape as [`no_recognizer`], naming the folder to fill.
+fn no_math_recognizer(s: &Session, cmd: &'static str) -> EngineError {
+    bad(
+        cmd,
+        format!(
+            "The math model is not installed, so Ink to Math is unavailable. Download it from Draw › Convert › Ink to Math, or copy its files into {}.",
+            model_directory(s, &PIX2TEXT_MFR)
         ),
     )
 }
@@ -168,7 +201,7 @@ pub struct InkEntry {
 /// is refused with the directory to install it in (never a panic, never a silent no-op).
 fn action_pen(s: &mut Session, p: &Json) -> Result<Json> {
     let on = bool_param(p, "on").unwrap_or(s.draw_tool != "actionPen");
-    if on && s.ink.is_none() {
+    if on && !s.ink.as_ref().is_some_and(|r| r.output() == RecognitionOutput::Text) {
         return Err(no_recognizer(s, "draw.actionPen"));
     }
     s.draw_tool = if on { "actionPen".into() } else { String::new() };
@@ -176,7 +209,7 @@ fn action_pen(s: &mut Session, p: &Json) -> Result<Json> {
         // Leaving the tool ends the entry: the next time it is used starts a fresh one.
         s.ink_entry = None;
     }
-    Ok(json!({"tool": s.draw_tool, "ready": s.ink.is_some()}))
+    Ok(json!({"tool": s.draw_tool, "ready": s.ink.as_ref().is_some_and(|r| r.output() == RecognitionOutput::Text)}))
 }
 
 /// `draw.actionPenInk {points, cell?}`: recognises the strokes of the handwriting entry being
@@ -194,7 +227,9 @@ fn action_pen_ink(s: &mut Session, p: &Json) -> Result<Json> {
     if pts.is_empty() {
         return Err(bad("draw.actionPenInk", "a stroke needs at least one point in `points`"));
     }
-    let Some(recognizer) = s.ink.clone() else { return Err(no_recognizer(s, "draw.actionPenInk")) };
+    let Some(recognizer) = s.ink.clone().filter(|r| r.output() == RecognitionOutput::Text) else {
+        return Err(no_recognizer(s, "draw.actionPenInk"));
+    };
     let (doc, si) = {
         let d = s.doc()?;
         (d.uid, d.wb.active_sheet())
@@ -278,27 +313,61 @@ fn action_pen_ink(s: &mut Session, p: &Json) -> Result<Json> {
 /// The backend a build without a recognizer would use: CPU, the one every platform has.
 const CPU_ONLY: &[Accelerator] = &[Accelerator::Cpu];
 
-/// `ink.status {accelerator?}`: what the UI's model panel shows. Cheap (one `stat` per model
-/// file), so the panel may ask every frame.
+/// `ink.status {accelerator?}`: what the UI's model panel shows for the handwriting model. Cheap
+/// (one `stat` per model file), so the panel may ask every frame.
 ///
 /// `accelerator` asks what a specific backend would give: the shipped build runs on CPU, and
 /// asking for one it does not have answers with `acceleratorMessage` instead of failing, so a
 /// caller can say "runs on CPU; OpenVINO NPU/GPU not available" and carry on (the feature
 /// behaves identically on CPU).
 fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
-    let m = &TROCR_SMALL_HANDWRITTEN;
+    let recognizer = s.ink.clone().filter(|r| r.output() == RecognitionOutput::Text);
+    model_status(
+        s,
+        p,
+        &TROCR_SMALL_HANDWRITTEN,
+        recognizer.as_ref(),
+        "ink.status",
+        "Action Pen is ready: draw with the Action Pen tool and the writing becomes text.",
+    )
+}
+
+/// `ink.mathStatus {accelerator?}`: the same answer for the Ink to Math model, so its panel can
+/// show name, licence, size, folder, status and the missing files before anything is downloaded.
+fn math_status(s: &mut Session, p: &Json) -> Result<Json> {
+    let recognizer = s.ink_math.clone().filter(|r| r.output() == RecognitionOutput::Math);
+    model_status(
+        s,
+        p,
+        &PIX2TEXT_MFR,
+        recognizer.as_ref(),
+        "ink.mathStatus",
+        "Ink to Math is ready: draw a formula, select its ink and choose Draw › Convert › Ink to Math.",
+    )
+}
+
+/// One model's status: what the panel shows and what every command's refusal names. `ready` is
+/// whether a recognizer of the right kind is installed; `ready_hint` is the line shown then.
+fn model_status(
+    s: &Session,
+    p: &Json,
+    m: &'static Manifest,
+    recognizer: Option<&Arc<dyn gridcraft_ink::Recognizer>>,
+    cmd: &'static str,
+    ready_hint: &str,
+) -> Result<Json> {
     let (state, directory) = match s.models_dir.as_deref().map(PathBuf::from) {
         Some(root) => (m.check_sizes(&root), m.dir(&root).display().to_string()),
-        None => (InstallState::Incomplete(vec!["no models directory is configured".to_string()]), model_directory(s)),
+        None => (InstallState::Incomplete(vec!["no models directory is configured".to_string()]), model_directory(s, m)),
     };
     let missing = match &state {
         InstallState::Incomplete(files) => files.clone(),
         _ => Vec::new(),
     };
     let files_present = state.is_installed();
-    let ready = s.ink.is_some();
-    let active = s.ink.as_ref().map_or(Accelerator::Cpu, |r| r.accelerator());
-    let available: &'static [Accelerator] = s.ink.as_ref().map_or(CPU_ONLY, |r| r.accelerators());
+    let ready = recognizer.is_some();
+    let active = recognizer.map_or(Accelerator::Cpu, |r| r.accelerator());
+    let available: &'static [Accelerator] = recognizer.map_or(CPU_ONLY, |r| r.accelerators());
     let requested = str_param(p, "accelerator").map(str::trim).filter(|name| !name.is_empty());
     let mut accelerator_message = None;
     if let Some(name) = requested {
@@ -306,7 +375,7 @@ fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
             Some(want) if available.contains(&want) => {}
             Some(want) => {
                 accelerator_message = Some(format!(
-                    "Handwriting runs on {}; {} is not available in this build, so recognition stays on {}.",
+                    "Ink recognition runs on {}; {} is not available in this build, so it stays on {}.",
                     active.label(),
                     want.label(),
                     active.label()
@@ -314,7 +383,7 @@ fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
             }
             None => {
                 return Err(bad(
-                    "ink.status",
+                    cmd,
                     format!(
                         "unknown accelerator `{name}`; this build runs on {} (available: {})",
                         active.label(),
@@ -325,11 +394,14 @@ fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
         }
     }
     let hint = if ready {
-        "Action Pen is ready: draw with the Action Pen tool and the writing becomes text.".to_string()
+        ready_hint.to_string()
     } else if files_present {
         "The model files are present but were not loaded; restart GridCraft or download the model again.".to_string()
     } else {
-        format!("Download the handwriting model, or copy its files into {directory}.")
+        format!(
+            "Download the {} model, or copy its files into {directory}.",
+            if m.output == RecognitionOutput::Math { "math" } else { "handwriting" }
+        )
     };
     Ok(json!({
         "model": m.id,
@@ -337,6 +409,7 @@ fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
         "revision": m.revision,
         "licence": m.licence,
         "source": m.source,
+        "output": m.output.as_str(),
         "bytes": m.total_bytes(),
         "runtime": m.runtime,
         "accelerator": active.as_str(),
@@ -349,6 +422,18 @@ fn ink_status(s: &mut Session, p: &Json) -> Result<Json> {
         "missing": missing,
         "hint": hint,
     }))
+}
+
+/// The model a model command names: `"math"` (also `"inkToMath"`, `"equation"`) for Ink to Math,
+/// anything else absent or `"text"` for the Action Pen's handwriting model. An unknown name is
+/// refused rather than silently importing into the wrong folder.
+fn manifest_param(p: &Json, cmd: &'static str) -> Result<&'static Manifest> {
+    match str_param(p, "model").map(|m| m.trim().to_ascii_lowercase().replace(['-', '_', ' '], "")) {
+        None => Ok(&TROCR_SMALL_HANDWRITTEN),
+        Some(m) if m.is_empty() || m == "text" || m == "handwriting" || m == "actionpen" || m == "ink" => Ok(&TROCR_SMALL_HANDWRITTEN),
+        Some(m) if m == "math" || m == "inktomath" || m == "equation" => Ok(&PIX2TEXT_MFR),
+        Some(other) => Err(bad(cmd, format!("unknown model `{other}`; use \"handwriting\" or \"math\""))),
+    }
 }
 
 /// Copies `from` over `to` through a temporary file, and only keeps it when its size and
@@ -387,8 +472,9 @@ fn copy_verified(from: &Path, to: &Path, f: &ModelFile) -> Result<()> {
     })
 }
 
-/// `ink.modelImport {path}`: copies a model file (or a folder of them) into the model directory,
-/// verifying each one. Importing the files one at a time works; the answer says what is missing.
+/// `ink.modelImport {path, model?}`: copies a model file (or a folder of them) into the model
+/// directory, verifying each one. Importing the files one at a time works; the answer says what
+/// is missing. `model: "math"` imports the Ink to Math model; the handwriting model is default.
 fn model_import(s: &mut Session, p: &Json) -> Result<Json> {
     let path = str_param(p, "path")
         .map(str::trim)
@@ -397,7 +483,7 @@ fn model_import(s: &mut Session, p: &Json) -> Result<Json> {
     let Some(root) = s.models_dir.as_deref().map(PathBuf::from) else {
         return Err(bad("ink.modelImport", "No model directory is configured. The desktop app sets one; `models/` beside the executable works too."));
     };
-    let m = &TROCR_SMALL_HANDWRITTEN;
+    let m = manifest_param(p, "ink.modelImport")?;
     let src = PathBuf::from(path);
     let dir = m.dir(&root);
     let mut copied: Vec<&str> = Vec::new();
@@ -438,20 +524,26 @@ fn model_import(s: &mut Session, p: &Json) -> Result<Json> {
     Ok(json!({"copied": copied, "installed": installed, "missing": missing, "directory": dir.display().to_string()}))
 }
 
-/// `ink.modelRemove {}`: deletes the model's directory and turns the tool off.
-fn model_remove(s: &mut Session, _p: &Json) -> Result<Json> {
+/// `ink.modelRemove {model?}`: deletes the model's directory and turns its tool off.
+fn model_remove(s: &mut Session, p: &Json) -> Result<Json> {
     let Some(root) = s.models_dir.as_deref().map(PathBuf::from) else {
         return Err(bad("ink.modelRemove", "No model directory is configured."));
     };
-    let dir = TROCR_SMALL_HANDWRITTEN.dir(&root);
+    let m = manifest_param(p, "ink.modelRemove")?;
+    let dir = m.dir(&root);
     if !dir.is_dir() {
-        return Err(bad("ink.modelRemove", format!("The handwriting model is not installed in {}.", dir.display())));
+        let which = if m.output == RecognitionOutput::Math { "math" } else { "handwriting" };
+        return Err(bad("ink.modelRemove", format!("The {which} model is not installed in {}.", dir.display())));
     }
     std::fs::remove_dir_all(&dir).map_err(|e| bad("ink.modelRemove", format!("{}: {e}", dir.display())))?;
-    s.ink = None;
-    s.ink_entry = None;
-    if s.draw_tool == "actionPen" {
-        s.draw_tool = String::new();
+    if m.output == RecognitionOutput::Math {
+        s.ink_math = None;
+    } else {
+        s.ink = None;
+        s.ink_entry = None;
+        if s.draw_tool == "actionPen" {
+            s.draw_tool = String::new();
+        }
     }
     Ok(json!({"removed": dir.display().to_string()}))
 }
@@ -528,6 +620,153 @@ pub fn ink_width(sh: &Shape) -> f32 {
 
 pub fn ink_points(sh: &Shape) -> Vec<[f32; 2]> {
     parse_points(&sh.text)
+}
+
+/// `points` as one stroke (`[[x, y], …]`) or several (`[[[x, y], …], …]`): non-finite pairs
+/// dropped, each stroke capped at 20,000 points and at most 32 strokes kept, like an Action Pen
+/// entry. `points` is input, so anything else is ignored rather than trusted.
+fn strokes_param(p: &Json) -> Vec<Vec<[f64; 2]>> {
+    fn one(a: &[Json]) -> Vec<[f64; 2]> {
+        a.iter()
+            .filter_map(|q| Some([q.get(0)?.as_f64()?, q.get(1)?.as_f64()?]))
+            .filter(|q| q[0].is_finite() && q[1].is_finite())
+            .take(gridcraft_ink::raster::MAX_POINTS)
+            .collect()
+    }
+    let Some(items) = p.get("points").and_then(Json::as_array) else { return Vec::new() };
+    let nested = items.first().and_then(Json::as_array).and_then(|a| a.first()).is_some_and(Json::is_array);
+    if nested {
+        items.iter().filter_map(Json::as_array).take(MAX_ENTRY_STROKES).map(|a| one(a)).filter(|s| !s.is_empty()).collect()
+    } else {
+        let stroke = one(items);
+        if stroke.is_empty() { Vec::new() } else { vec![stroke] }
+    }
+}
+
+/// What `draw.inkToMath` recognises, and what to do with the sheet once the equation is ready.
+struct MathInk {
+    /// The strokes in sheet points, one entry per stroke; they are never joined.
+    strokes: Vec<Vec<[f32; 2]>>,
+    /// Where the equation goes (the ink's anchor) and, for supplied points, the box they cover.
+    anchor: Anchor,
+    /// The equation's ink colour: the stroke's, or Automatic for supplied points.
+    color: Color,
+    /// The pen width the strokes are rasterised at.
+    pen: f32,
+    /// Ink shapes to remove once the equation is in place; empty for supplied points.
+    consumed: Vec<u32>,
+}
+
+/// The ink ids a command names: `ids` (a list, honoured even when empty), else `id`, else none.
+fn ink_ids_param(p: &Json) -> Option<Vec<u32>> {
+    if let Some(list) = p.get("ids").and_then(Json::as_array) {
+        return Some(list.iter().filter_map(Json::as_u64).map(|v| v.min(u32::MAX as u64) as u32).take(MAX_ENTRY_STROKES).collect());
+    }
+    u32_param(p, "id").map(|id| vec![id])
+}
+
+/// `draw.inkToMath {id?|ids?, points?}`: recognises handwritten ink as a formula and replaces it
+/// with an equation holding the LaTeX the math model returns, at the ink's anchor. One undo step;
+/// the ink is consumed only once the equation is ready, so a refused recognition leaves the sheet
+/// exactly as it was. Without the math model the command refuses with the folder to install it in
+/// (the UI opens the model panel instead).
+///
+/// `ids` (or `id`) names the strokes — the UI passes the selected ink; without either the last
+/// stroke on the sheet is used, as `draw.inkToShape` does. `points` recognises strokes supplied
+/// directly and consumes nothing, which is what a script, MCP or a test uses.
+fn ink_to_math(s: &mut Session, p: &Json) -> Result<Json> {
+    const CMD: &str = "draw.inkToMath";
+    let Some(recognizer) = s.ink_math.clone().filter(|r| r.output() == RecognitionOutput::Math) else {
+        return Err(no_math_recognizer(s, CMD));
+    };
+    let explicit = strokes_param(p);
+    let named = ink_ids_param(p);
+    let d = s.doc()?;
+    let si = d.wb.active_sheet();
+    let sheet = d.wb.sheet(si).ok_or(EngineError::NoDocument)?;
+    if sheet.is_protected() {
+        return Err(EngineError::Other(PROTECTED.into()));
+    }
+    // Explicit points are used as drawn; named ink becomes absolute sheet points so several
+    // strokes (a fraction bar and its parts, an "=") keep their relative positions.
+    let ink = if !explicit.is_empty() {
+        let (minx, miny) = explicit.iter().flatten().fold((f64::INFINITY, f64::INFINITY), |(x, y), q| (x.min(q[0]), y.min(q[1])));
+        let (maxx, maxy) = explicit.iter().flatten().fold((f64::NEG_INFINITY, f64::NEG_INFINITY), |(x, y), q| (x.max(q[0]), y.max(q[1])));
+        let cell = CellRef::new(sheet.row_at(miny.max(0.0)), sheet.col_at(minx.max(0.0)));
+        MathInk {
+            strokes: explicit.iter().map(|stroke| stroke.iter().map(|q| [q[0] as f32, q[1] as f32]).collect()).collect(),
+            anchor: Anchor {
+                cell,
+                dx: (minx - sheet.col_left(cell.col)) as f32,
+                dy: (miny - sheet.row_top(cell.row)) as f32,
+                width: (maxx - minx).max(1.0) as f32,
+                height: (maxy - miny).max(1.0) as f32,
+                mode: AnchorMode::MoveOnly,
+            },
+            color: Color::Auto,
+            pen: if s.draw_width <= 0.0 { 2.0 } else { s.draw_width },
+            consumed: Vec::new(),
+        }
+    } else {
+        let picked: Vec<&Shape> = match named {
+            Some(ids) => ids.iter().filter_map(|id| sheet.shapes.iter().find(|x| x.id == *id && x.kind == ShapeKind::Ink)).collect(),
+            None => sheet.shapes.iter().rfind(|x| x.kind == ShapeKind::Ink).into_iter().collect(),
+        };
+        let Some(first) = picked.first() else {
+            return Err(bad(CMD, "no ink stroke is selected to convert into an equation"));
+        };
+        let (left, top) = (sheet.col_left(first.anchor.cell.col), sheet.row_top(first.anchor.cell.row));
+        let (ox, oy) = (left + first.anchor.dx as f64, top + first.anchor.dy as f64);
+        MathInk {
+            strokes: picked
+                .iter()
+                .map(|sh| ink_points(sh).iter().map(|q| [(ox + q[0] as f64) as f32, (oy + q[1] as f64) as f32]).collect())
+                .collect(),
+            anchor: Anchor {
+                cell: first.anchor.cell,
+                dx: first.anchor.dx,
+                dy: first.anchor.dy,
+                width: first.anchor.width,
+                height: first.anchor.height,
+                mode: AnchorMode::MoveOnly,
+            },
+            color: first.line,
+            pen: ink_width(first),
+            consumed: picked.iter().map(|sh| sh.id).collect(),
+        }
+    };
+    let MathInk { strokes, anchor, color, pen, consumed } = ink;
+    let image = {
+        let refs: Vec<&[[f32; 2]]> = strokes.iter().map(Vec::as_slice).collect();
+        gridcraft_ink::raster::rasterize_strokes(&refs, pen).map_err(|e| bad(CMD, e.to_string()))
+    }?;
+    let latex = recognizer.recognize(&image).map_err(|e| bad(CMD, e.to_string()))?.trim().to_string();
+    if latex.is_empty() {
+        return Err(bad(CMD, "Nothing was recognised as a formula. Write larger, or try again."));
+    }
+    if latex.len() > gridcraft_math::MAX_SOURCE_BYTES {
+        return Err(bad(
+            CMD,
+            format!(
+                "The recognised formula is too long: {} bytes, over the {} the equation can hold.",
+                latex.len(),
+                gridcraft_math::MAX_SOURCE_BYTES
+            ),
+        ));
+    }
+    // Laid out and validated before anything changes: a model that answers something the layout
+    // engine refuses must not consume the ink.
+    let d = s.doc()?;
+    let id = d.wb.next_object_id();
+    let shape = super::equation::build_equation(CMD, id, &latex, anchor, color, super::equation::DEFAULT_SIZE_PT)?;
+    let si = d.wb.active_sheet();
+    edit(s, |cx| {
+        let sh = cx.sheet_mut(si)?;
+        sh.shapes.retain(|x| !consumed.contains(&x.id));
+        sh.shapes.push(shape);
+        Ok(Json::Null)
+    })?;
+    Ok(json!({"equation": id, "latex": latex}))
 }
 
 fn ink_to_shape(s: &mut Session, p: &Json) -> Result<Json> {

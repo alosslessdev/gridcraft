@@ -6373,15 +6373,201 @@ fn ink_commands_never_panic_on_empty_or_hostile_params() {
     // this test created, never the shared temp directory with a developer's own model in it.
     let scratch = exclusive_scratch("ink-hostile");
     s.models_dir = scratch.as_ref().map(|dir| dir.display().to_string());
-    for id in ["draw.actionPen", "draw.actionPenInk", "ink.status", "ink.modelImport", "ink.modelRemove"] {
-        for p in [json!({}), json!([]), json!(7), json!("x"), json!({"points": "no", "path": "\u{0}../..", "on": "yes"})] {
+    for id in ["draw.actionPen", "draw.actionPenInk", "draw.inkToMath", "ink.status", "ink.mathStatus", "ink.modelImport", "ink.modelRemove"] {
+        for p in [
+            json!({}),
+            json!([]),
+            json!(7),
+            json!("x"),
+            json!({"points": "no", "path": "\u{0}../..", "on": "yes"}),
+            json!({"model": "math", "path": "x", "ids": [1]}),
+            json!({"model": "nope"}),
+        ] {
             let r = s.execute(id, p);
             assert!(!matches!(r, Err(crate::EngineError::Internal(..))), "{id} panicked: {r:?}");
-            let asked = s.execute("ink.status", json!({"accelerator": "openvino"}));
-            assert!(!matches!(asked, Err(crate::EngineError::Internal(..))), "ink.status panicked: {asked:?}");
+            for status in ["ink.status", "ink.mathStatus"] {
+                let asked = s.execute(status, json!({"accelerator": "openvino"}));
+                assert!(!matches!(asked, Err(crate::EngineError::Internal(..))), "{status} panicked: {asked:?}");
+            }
         }
     }
     if let Some(dir) = scratch {
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+// ---------------------------------------------------------------- Ink to Math (#1778)
+
+/// A session with the Ink to Math recognizer installed, as the desktop app does once the math
+/// model is loaded. No model file is involved.
+fn math_session(latex: &str) -> Session {
+    let mut s = s();
+    s.ink_math = Some(std::sync::Arc::new(gridcraft_ink::FixedRecognizer::math(latex)));
+    s
+}
+
+/// Draws one ink stroke through `draw.stroke` and answers its shape id.
+fn draw_ink(s: &mut Session, points: serde_json::Value) -> u32 {
+    s.execute("draw.stroke", json!({"points": points})).unwrap()["shape"].as_u64().unwrap() as u32
+}
+
+/// The sheet's shapes, cloned so a later command can borrow the session.
+fn shapes(s: &Session) -> Vec<gridcraft_model::Shape> {
+    s.doc().unwrap().wb.active().unwrap().shapes.clone()
+}
+
+#[test]
+fn ink_to_math_turns_selected_ink_into_one_equation_in_one_undo_step() {
+    let mut s = math_session("\\frac{1}{2}");
+    let numerator = draw_ink(&mut s, json!([[30.0, 20.0], [30.0, 90.0]]));
+    let denominator = draw_ink(&mut s, json!([[70.0, 20.0], [90.0, 50.0], [70.0, 90.0]]));
+    let ink = shapes(&s);
+    let anchor = ink.iter().find(|x| x.id == numerator).unwrap().anchor;
+    let undo_before = s.doc().unwrap().undo.len();
+
+    let r = s.execute("draw.inkToMath", json!({"ids": [numerator, denominator]})).unwrap();
+    assert_eq!(r["latex"], json!("\\frac{1}{2}"));
+    let equation = r["equation"].as_u64().unwrap() as u32;
+    let after = shapes(&s);
+    assert!(after.iter().all(|x| x.kind != gridcraft_model::ShapeKind::Ink), "the consumed ink is gone");
+    let e = after.iter().find(|x| x.id == equation).unwrap();
+    assert_eq!(e.kind, gridcraft_model::ShapeKind::Equation);
+    assert_eq!(e.text, "\\frac{1}{2}");
+    // The equation sits where the ink was.
+    assert_eq!(e.anchor.cell, anchor.cell);
+    assert_eq!(e.anchor.dx, anchor.dx);
+    assert_eq!(e.anchor.dy, anchor.dy);
+    assert!(matches!(e.math.get(&e.text), Some(Ok(_))), "the equation is laid out");
+    // One undo step takes the equation away and brings both strokes back.
+    assert_eq!(s.doc().unwrap().undo.len(), undo_before + 1);
+    s.execute("edit.undo", json!({})).unwrap();
+    let restored = shapes(&s);
+    assert_eq!(restored.len(), 2);
+    assert!(restored.iter().all(|x| x.kind == gridcraft_model::ShapeKind::Ink));
+    assert!(restored.iter().any(|x| x.id == numerator) && restored.iter().any(|x| x.id == denominator));
+}
+
+#[test]
+fn ink_to_math_without_the_model_keeps_the_ink_and_names_the_folder() {
+    let mut s = s();
+    let id = draw_ink(&mut s, json!([[30.0, 20.0], [30.0, 90.0]]));
+    let before = shapes(&s);
+    let undo_before = s.doc().unwrap().undo.len();
+    let e = s.execute("draw.inkToMath", json!({"ids": [id]})).unwrap_err().to_string();
+    assert!(e.contains("not installed"), "{e}");
+    assert!(e.contains("math model"), "{e}");
+    assert!(e.contains("pix2text-mfr"), "the folder to fill is named: {e}");
+    assert_eq!(shapes(&s).len(), before.len());
+    assert_eq!(shapes(&s)[0].kind, gridcraft_model::ShapeKind::Ink);
+    assert_eq!(s.doc().unwrap().undo.len(), undo_before, "a refusal is not an undo step");
+    // A host that installs the handwriting recognizer in the math slot gets the same refusal.
+    s.ink_math = Some(std::sync::Arc::new(gridcraft_ink::FixedRecognizer::new("42")));
+    let e = s.execute("draw.inkToMath", json!({"ids": [id]})).unwrap_err().to_string();
+    assert!(e.contains("not installed"), "{e}");
+}
+
+#[test]
+fn ink_to_math_recognises_supplied_points_without_consuming_ink() {
+    let mut s = math_session("x^2");
+    let ink = draw_ink(&mut s, json!([[5.0, 5.0], [25.0, 25.0]]));
+    // Several strokes, then one: both shapes of `points` work.
+    let both = s.execute("draw.inkToMath", json!({"points": [[[10.0, 10.0], [40.0, 40.0]], [[50.0, 50.0], [80.0, 80.0]]]})).unwrap();
+    assert_eq!(both["latex"], json!("x^2"));
+    let ones = s.execute("draw.inkToMath", json!({"points": [[10.0, 10.0], [40.0, 40.0]]})).unwrap();
+    assert_eq!(ones["latex"], json!("x^2"));
+    let all = shapes(&s);
+    assert!(all.iter().any(|x| x.id == ink && x.kind == gridcraft_model::ShapeKind::Ink), "supplied points consume no ink");
+    assert_eq!(all.iter().filter(|x| x.kind == gridcraft_model::ShapeKind::Equation).count(), 2);
+}
+
+#[test]
+fn ink_to_math_uses_the_last_stroke_when_none_is_named() {
+    let mut s = math_session("y");
+    draw_ink(&mut s, json!([[5.0, 5.0], [25.0, 25.0]]));
+    let last = draw_ink(&mut s, json!([[45.0, 45.0], [65.0, 65.0]]));
+    s.execute("draw.inkToMath", json!({})).unwrap();
+    let all = shapes(&s);
+    assert!(all.iter().any(|x| x.id != last && x.kind == gridcraft_model::ShapeKind::Ink), "the earlier stroke stays");
+    assert!(!all.iter().any(|x| x.id == last), "the last stroke was consumed");
+}
+
+#[test]
+fn a_model_answer_that_is_not_latex_leaves_the_ink_alone() {
+    let mut s = math_session("\\frac{1}{");
+    let id = draw_ink(&mut s, json!([[30.0, 20.0], [30.0, 90.0]]));
+    let undo_before = s.doc().unwrap().undo.len();
+    let e = s.execute("draw.inkToMath", json!({"ids": [id]})).unwrap_err().to_string();
+    assert!(e.contains("draw.inkToMath"), "{e}");
+    assert!(e.contains("equation"), "{e}");
+    let all = shapes(&s);
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].kind, gridcraft_model::ShapeKind::Ink);
+    assert_eq!(s.doc().unwrap().undo.len(), undo_before);
+}
+
+#[test]
+fn ink_to_math_refuses_hostile_points_without_panicking_or_changing_the_sheet() {
+    // No ink on the sheet: malformed input must be a refusal, not a panic or an insertion.
+    let mut empty = math_session("x");
+    for p in [
+        json!({}),
+        json!({"points": []}),
+        json!({"points": "x"}),
+        json!({"points": [[1.0]]}),
+        json!({"points": [["a", "b"]]}),
+        json!({"points": [1e308, -1e308]}),
+        json!({"points": [[-3e38, 0.0], [3e38, 0.0]]}),
+        json!({"ids": []}),
+        json!({"ids": [999_999]}),
+        json!({"ids": "all"}),
+        json!({"id": -1}),
+    ] {
+        let r = empty.execute("draw.inkToMath", p.clone());
+        assert!(r.is_err(), "{p}");
+        assert!(!matches!(r, Err(crate::EngineError::Internal(..))), "{p} panicked: {r:?}");
+    }
+    assert!(shapes(&empty).is_empty());
+
+    // With ink, supplied points win over `ids`; the ink is only consumed by a real conversion.
+    let mut s = math_session("x");
+    let id = draw_ink(&mut s, json!([[10.0, 10.0], [30.0, 30.0]]));
+    for p in [json!({"ids": [id], "points": [[0.0, 0.0]]}), json!({"points": [[10.0, 10.0], [30.0, 30.0]]})] {
+        let r = s.execute("draw.inkToMath", p.clone());
+        assert!(r.is_ok(), "{p}: {r:?}");
+    }
+    assert!(shapes(&s).iter().any(|x| x.id == id && x.kind == gridcraft_model::ShapeKind::Ink), "supplied points consume no ink");
+    // A second conversion through `ids` does consume it.
+    s.execute("draw.inkToMath", json!({"ids": [id]})).unwrap();
+    assert!(shapes(&s).iter().all(|x| x.id != id));
+}
+
+#[test]
+fn an_ink_to_math_equation_survives_save_and_reopen() {
+    let mut s = math_session("\\frac{1}{2}");
+    let id = draw_ink(&mut s, json!([[30.0, 20.0], [30.0, 90.0]]));
+    s.execute("draw.inkToMath", json!({"ids": [id]})).unwrap();
+    reopen(&mut s);
+    let all = shapes(&s);
+    assert!(!all.iter().any(|x| x.kind == gridcraft_model::ShapeKind::Ink));
+    let e = all.iter().find(|x| x.kind == gridcraft_model::ShapeKind::Equation).expect("the equation is in the file");
+    assert_eq!(e.text, "\\frac{1}{2}");
+    assert!(matches!(e.math.get(&e.text), Some(Ok(_))), "opening lays the LaTeX out again");
+}
+
+#[test]
+fn ink_math_status_reports_the_math_model_contract() {
+    let mut s = s();
+    let st = s.execute("ink.mathStatus", json!({})).unwrap();
+    assert_eq!(st["model"], json!("pix2text-mfr"));
+    assert_eq!(st["licence"], json!("MIT"));
+    assert_eq!(st["output"], json!("math"));
+    assert_eq!(st["bytes"], json!(87_496_990u64 + 30_114_937 + 39_161));
+    assert_eq!(st["ready"], json!(false));
+    assert!(st["directory"].as_str().is_some_and(|d| d.contains("pix2text-mfr")));
+    s.ink_math = Some(std::sync::Arc::new(gridcraft_ink::FixedRecognizer::math("x")));
+    let st = s.execute("ink.mathStatus", json!({})).unwrap();
+    assert_eq!(st["ready"], json!(true));
+    assert!(st["hint"].as_str().is_some_and(|h| h.contains("Ink to Math")));
+    // The handwriting status does not mistake the math model for its own.
+    assert_eq!(s.execute("ink.status", json!({})).unwrap()["ready"], json!(false));
 }

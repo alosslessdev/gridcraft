@@ -143,6 +143,7 @@ pub const CATALOG: &[(&str, &str, &str, &str)] = &[
     ("draw.eraser", "Draw", "Tools", "Eraser"),
     ("draw.lasso", "Draw", "Tools", "Lasso Select"),
     ("draw.inkToShape", "Draw", "Convert", "Ink to Shape"),
+    ("draw.inkToMath", "Draw", "Convert", "Ink to Math"),
     // Page Layout
     ("pageLayout.theme", "Page Layout", "Themes", "Themes"),
     ("pageLayout.themeColors", "Page Layout", "Themes", "Colors"),

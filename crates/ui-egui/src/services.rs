@@ -63,6 +63,9 @@ pub struct Services {
     /// [`Services::models`] so the model plumbing stays generic; this is the one hook that knows
     /// about `gridcraft-ink-rten`.
     pub ink_loader: Option<InkLoader>,
+    /// Native: build the Ink to Math recognizer from a model root. The same hook in shape, with
+    /// its own model, so a host may be able to load one model and not the other.
+    pub math_loader: Option<InkLoader>,
     /// Native: pick model files to import by hand (`rfd`), as the model panel's Import offers.
     pub pick_model_files: Option<Box<dyn Fn() -> Vec<String>>>,
 }

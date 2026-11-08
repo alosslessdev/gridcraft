@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::Digest;
 
-use crate::{Accelerator, Error, is_safe_relative_path};
+use crate::{Accelerator, Error, RecognitionOutput, is_safe_relative_path};
 
 /// One file of a model, relative to the model's directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +36,13 @@ pub struct Manifest {
     pub source: &'static str,
     /// The runtime and version the manifest's hashes and the measured accuracy belong to.
     pub runtime: &'static str,
+    /// What the model answers — typed text for a cell, or LaTeX for an equation — so the engine
+    /// never writes one into the other's place.
+    pub output: RecognitionOutput,
+    /// Longest answer, in decoder tokens, including the stop token's step. A line that reaches
+    /// it without a stop token is refused rather than returned truncated. Bounded by the
+    /// decoder's 512 learned positions.
+    pub max_steps: usize,
     /// The accelerators the model can run on, best first. CPU is always there; an optional
     /// backend crate (`docs/action-pen.md`) would add one, never replace it.
     pub accelerators: &'static [Accelerator],
@@ -51,6 +58,8 @@ pub const TROCR_SMALL_HANDWRITTEN: Manifest = Manifest {
     licence: "MIT",
     source: "https://huggingface.co/Xenova/trocr-small-handwritten",
     runtime: "rten 0.27 (pure Rust, CPU)",
+    output: RecognitionOutput::Text,
+    max_steps: 32,
     accelerators: &[Accelerator::Cpu],
     files: &[
         ModelFile {
@@ -70,6 +79,45 @@ pub const TROCR_SMALL_HANDWRITTEN: Manifest = Manifest {
             bytes: 4_494_727,
             sha256: "68bcb5468c854362a615f3d2ff6a5e4091a85f4c8198993ed9a30afe0b143737",
             url: "https://huggingface.co/Xenova/trocr-small-handwritten/resolve/02bea33ca09a70e2e2d91140a7e6e1a729606a5b/tokenizer.json",
+        },
+    ],
+};
+
+/// Pix2Text MFR (Mathematical Formula Recognition), MIT: a TrOCR vision-encoder/decoder
+/// fine-tuned on handwritten and printed formulas, exported to ONNX with the same graph shape as
+/// [`TROCR_SMALL_HANDWRITTEN`] (encoder `pixel_values` → `last_hidden_state`; decoder
+/// `input_ids` + `encoder_hidden_states` → `logits`; 384 × 384 RGB, mean/std 0.5; ByteLevel BPE
+/// tokenizer over LaTeX, 1,200 tokens). It answers a formula's LaTeX source, which Draw ›
+/// Convert › Ink to Math inserts as an equation (`docs/ink-to-math.md`).
+pub const PIX2TEXT_MFR: Manifest = Manifest {
+    id: "pix2text-mfr",
+    name: "Pix2Text MFR (handwritten maths)",
+    revision: "bea257edb2653f2ae413b084f2ac0e8299d08df0",
+    licence: "MIT",
+    source: "https://huggingface.co/breezedeus/pix2text-mfr",
+    runtime: "rten 0.27 (pure Rust, CPU)",
+    output: RecognitionOutput::Math,
+    // Formulas are longer than a line of words; the decoder has 512 learned positions.
+    max_steps: 256,
+    accelerators: &[Accelerator::Cpu],
+    files: &[
+        ModelFile {
+            path: "encoder_model.onnx",
+            bytes: 87_496_990,
+            sha256: "bd8d5c322792e9ec45793af5569e9748f82a3d728a9e00213dbfc56c1486f37d",
+            url: "https://huggingface.co/breezedeus/pix2text-mfr/resolve/bea257edb2653f2ae413b084f2ac0e8299d08df0/encoder_model.onnx",
+        },
+        ModelFile {
+            path: "decoder_model.onnx",
+            bytes: 30_114_937,
+            sha256: "fd0f92d7a012f3dae41e1ac79421aea0ea888b5a66cb3f9a004e424f82f3daed",
+            url: "https://huggingface.co/breezedeus/pix2text-mfr/resolve/bea257edb2653f2ae413b084f2ac0e8299d08df0/decoder_model.onnx",
+        },
+        ModelFile {
+            path: "tokenizer.json",
+            bytes: 39_161,
+            sha256: "3e2ab757277d22639bec28c9d7972e352d3d1dba223051fa674002dc5ab64df3",
+            url: "https://huggingface.co/breezedeus/pix2text-mfr/resolve/bea257edb2653f2ae413b084f2ac0e8299d08df0/tokenizer.json",
         },
     ],
 };
@@ -116,6 +164,10 @@ impl Manifest {
         }
         if !self.accelerators.contains(&Accelerator::Cpu) {
             return Err(Error::Corrupt(format!("{} must run on CPU: that is the backend every platform has", self.id)));
+        }
+        // The decoder's learned positions: a step cap outside them would decode past the model.
+        if self.max_steps == 0 || self.max_steps > 512 {
+            return Err(Error::Corrupt(format!("{} has an unusable step cap of {} (1 to 512)", self.id, self.max_steps)));
         }
         for f in self.files {
             if !is_safe_relative_path(f.path) {
@@ -235,6 +287,8 @@ mod tests {
         licence: "MIT",
         source: "https://example.invalid/tiny",
         runtime: "rten 0.27 (pure Rust, CPU)",
+        output: RecognitionOutput::Text,
+        max_steps: 32,
         accelerators: &[Accelerator::Cpu],
         files: &[ModelFile {
             path: "m.onnx",
@@ -254,6 +308,27 @@ mod tests {
         assert!(TROCR_SMALL_HANDWRITTEN.file_named("tokenizer.json").is_some());
         assert!(TROCR_SMALL_HANDWRITTEN.file_named("onnx/decoder_model.onnx").is_some());
         assert!(TROCR_SMALL_HANDWRITTEN.file_named("decoder_model.onnx").is_some());
+    }
+
+    #[test]
+    fn the_math_manifest_is_valid_and_answers_latex() {
+        assert_eq!(PIX2TEXT_MFR.validate(), Ok(()));
+        assert_eq!(PIX2TEXT_MFR.output, RecognitionOutput::Math);
+        assert_eq!(TROCR_SMALL_HANDWRITTEN.output, RecognitionOutput::Text);
+        assert_eq!(PIX2TEXT_MFR.total_bytes(), 87_496_990 + 30_114_937 + 39_161);
+        // Three files in the order the loader reads them: encoder, decoder, tokenizer.
+        let paths: Vec<&str> = PIX2TEXT_MFR.files.iter().map(|f| f.path).collect();
+        assert_eq!(paths, ["encoder_model.onnx", "decoder_model.onnx", "tokenizer.json"]);
+        let (math_steps, text_steps) = (PIX2TEXT_MFR.max_steps, TROCR_SMALL_HANDWRITTEN.max_steps);
+        assert!(math_steps > text_steps, "a formula needs more tokens than a line of words");
+        // The range check above (1 to 512, the decoder's learned positions) is part of `validate`.
+        // The model card's licence is the model's, not the runtime's.
+        assert_eq!(PIX2TEXT_MFR.licence, "MIT");
+        // A step cap past the decoder's learned positions is refused.
+        const TOO_LONG: Manifest = Manifest { max_steps: 513, ..PIX2TEXT_MFR };
+        assert!(matches!(TOO_LONG.validate(), Err(Error::Corrupt(_))));
+        const NO_STEPS: Manifest = Manifest { max_steps: 0, ..PIX2TEXT_MFR };
+        assert!(matches!(NO_STEPS.validate(), Err(Error::Corrupt(_))));
     }
 
     #[test]

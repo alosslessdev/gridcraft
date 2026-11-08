@@ -60,6 +60,26 @@ pub fn describe(latex: &str, e: &MathError) -> String {
     }
 }
 
+/// A laid-out equation shape. `anchor` gives the position (cell, offsets and mode); the frame is
+/// sized for `latex` at `size` points and the layout is cached for the painter. This is the one
+/// way an equation shape is made — `insert.equation` and `draw.inkToMath` both use it.
+pub(crate) fn build_equation(cmd: &str, id: u32, latex: &str, anchor: Anchor, color: Color, size: f64) -> Result<Shape> {
+    let list = lay_out(cmd, latex)?;
+    let (width, height) = frame_for(&list, (size * PX_PER_PT) as f32);
+    let mut shape = Shape {
+        id,
+        kind: ShapeKind::Equation,
+        anchor: Anchor { width, height, ..anchor },
+        fill: Color::Auto,
+        line: color,
+        text: latex.to_string(),
+        format: Default::default(),
+        math: Default::default(),
+    };
+    shape.math.refresh(latex);
+    Ok(shape)
+}
+
 fn insert_equation(s: &mut Session, p: &Json) -> Result<Json> {
     const CMD: &str = "insert.equation";
     let latex = str_param(p, "latex").ok_or_else(|| bad(CMD, "`latex` must be the equation's LaTeX source, such as \"x^2 + y^2 = r^2\""))?;
@@ -74,7 +94,6 @@ fn insert_equation(s: &mut Session, p: &Json) -> Result<Json> {
         None | Some(Json::Null) => Color::Auto,
         Some(c) => super::format::color_param(Some(c)).ok_or_else(|| bad(CMD, "`color` must be a hex colour such as \"#1F4E79\", or \"auto\""))?,
     };
-    let list = lay_out(CMD, latex)?;
     let at = match cell_param(s, p, "cell")? {
         Some(c) => Some(c),
         None => cell_param(s, p, "at")?,
@@ -85,18 +104,8 @@ fn insert_equation(s: &mut Session, p: &Json) -> Result<Json> {
     }
     let at = at.unwrap_or(d.selection.active);
     let id = d.wb.next_object_id();
-    let (width, height) = frame_for(&list, (size * PX_PER_PT) as f32);
-    let mut shape = Shape {
-        id,
-        kind: ShapeKind::Equation,
-        anchor: Anchor { cell: at, dx: 0.0, dy: 0.0, width, height, mode: AnchorMode::MoveOnly },
-        fill: Color::Auto,
-        line: color,
-        text: latex.to_string(),
-        format: Default::default(),
-        math: Default::default(),
-    };
-    shape.math.refresh(latex);
+    let shape =
+        build_equation(CMD, id, latex, Anchor { cell: at, dx: 0.0, dy: 0.0, width: 0.0, height: 0.0, mode: AnchorMode::MoveOnly }, color, size)?;
     let sheet = d.wb.active_sheet();
     edit(s, |cx| {
         cx.sheet_mut(sheet)?.shapes.push(shape);

@@ -288,6 +288,11 @@ pub struct GridState {
     pub ink_status: Option<serde_json::Value>,
     pub ink_job: Option<std::sync::mpsc::Receiver<crate::inkpanel::Job>>,
     pub ink_error: Option<String>,
+    /// Draw › Convert › Ink to Math: the math model's own `ink.mathStatus`, its worker job and
+    /// the last error, kept apart so one model's download cannot be mistaken for the other's.
+    pub math_status: Option<serde_json::Value>,
+    pub math_job: Option<std::sync::mpsc::Receiver<crate::inkpanel::Job>>,
+    pub math_error: Option<String>,
     /// Page ranges for Page Break Preview, cached per (doc uid, revision, sheet).
     pub pages: Option<PagesCache>,
     /// The PivotTable Fields pane's `pivot.fields` answer, cached per (doc uid, revision, pivot):

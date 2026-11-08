@@ -305,8 +305,10 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
   values on rows or columns, date grouping, sort, filters, show-values-as, refresh, and XLSX round-trip.
 - Page layout & print: Page Break Preview, print settings, PDF export and printing.
 - What-if: Goal Seek, scenarios, data tables. Spelling (system word list) and thesaurus.
-- Draw: pen, highlighter, eraser, ink strokes, Ink to Shape and the Action Pen (handwriting
-  into the cell as a typed value, once the TrOCR model is downloaded: [action-pen.md](action-pen.md)).
+- Draw: pen, highlighter, eraser, ink strokes, Ink to Shape, Ink to Math (selected ink becomes an
+  equation, once the Pix2Text MFR model is downloaded: [ink-to-math.md](ink-to-math.md)) and the
+  Action Pen (handwriting into the cell as a typed value, once the TrOCR model is downloaded:
+  [action-pen.md](action-pen.md)).
   Task panes: Comments (threaded
   replies, resolve), Watch Window, Selection, Format Chart.
 - Charts: column, bar, line, area, pie, doughnut (one concentric ring per series), scatter,
@@ -336,6 +338,7 @@ The inventory carried over from the 2026-10-07 ROADMAP.md, updated for what land
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-07 | minor | Draw: Ink to Math turns selected handwriting into an equation through the equation path; the Pix2Text MFR model is downloaded, never bundled ([ink-to-math.md](ink-to-math.md)). No score change |
 | 2026-11-07 | minor | Draw: the Action Pen writes recognised handwriting into the cell as a typed value; the TrOCR small model is downloaded, never bundled ([action-pen.md](action-pen.md)). No score change |
 | 2026-11-02 | minor | Form controls (buttons, scroll bars, spin buttons) in Insert objects and Automation; catalog 277 / 292 → 281 / 296 (Developer › Controls) |
 | 2026-11-02 | minor | Insert objects: equations; catalog count 277 / 292 (no score change) |

@@ -155,8 +155,9 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
   copied in before the tool is available. **Estimate:** 6–12 h (an ink corpus, a rasteriser
   tuning loop, and a model choice for non-Latin scripts).
 - SmartArt, WordArt, signature line, objects, 3-D models, screenshot; 8 shape kinds vs ~170;
-  pictures in cells (#61, PR #105). Equations exist (LaTeX source with a live preview, Office Math in xlsx); there is
-  no structured (WYSIWYG) equation editing and no ink equations. **Estimate:** 25–40 h.
+  pictures in cells (#61, PR #105). Equations exist (LaTeX source with a live preview, Office Math in xlsx) and
+  Ink to Math turns selected handwriting into one ([ink-to-math.md](ink-to-math.md)); there is
+  no structured (WYSIWYG) equation editing. **Estimate:** 25–40 h.
 
 ### 18. Accessibility (U)
 - AccessKit on, but no accessible grid/ribbon tree, no high contrast, no checker. **Estimate:** 12–18 h.
@@ -192,6 +193,7 @@ No alpha blockers: every core workflow passes the [alpha gate](roadmap.md#alpha-
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-07 | minor | §17: Ink to Math inserts an equation from selected handwriting ([ink-to-math.md](ink-to-math.md)); its model is user-installed and its accuracy on rasterised ink is unmeasured, so the gap stays open |
 | 2026-11-07 | minor | §17: the Action Pen recognises handwriting into the cell ([action-pen.md](action-pen.md)); its model is user-installed and its accuracy on rasterised ink is unmeasured, so the gap stays open |
 | 2026-11-02 | minor | §17: equations (Insert › Equation, LaTeX source, gallery, editor) |
 | 2026-11-02 | minor | §13: Solver Sensitivity report: shadow prices, reduced costs and allowable ranges for Simplex LP; Lagrange multipliers and reduced gradients for GRG Nonlinear |

@@ -13,6 +13,10 @@ works without it (the tool is disabled and says where the model goes), and a per
 once or copies it in by hand. Nothing is fetched at startup, on file open or while a pane is
 open, and inference never touches the network.
 
+The same stroke capture, rasteriser and `Recognizer` seam serve Draw › Convert › Ink to Math,
+which turns selected ink into an equation instead of text; its model and command are described in
+[ink-to-math.md](ink-to-math.md).
+
 ## The model
 
 | | |

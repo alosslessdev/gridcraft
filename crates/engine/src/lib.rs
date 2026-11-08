@@ -514,6 +514,11 @@ pub struct Session {
     /// the directory to install the model in. The engine never loads a model itself: that is a
     /// native-only runtime (`gridcraft-ink-rten`), see `docs/action-pen.md`.
     pub ink: Option<std::sync::Arc<dyn gridcraft_ink::Recognizer>>,
+    /// The Ink to Math recognizer, which the host installs when the math model is present. Its
+    /// answer is LaTeX, inserted as an equation by `draw.inkToMath`; `None` makes that command
+    /// refuse with the directory to install the model in. Separate from [`Session::ink`] because
+    /// the two models are independent: either, both or neither may be installed.
+    pub ink_math: Option<std::sync::Arc<dyn gridcraft_ink::Recognizer>>,
     /// Root directory of the handwriting models (`$GRIDCRAFT_MODELS` or the app's settings
     /// folder), set by the host. Commands use it to find, verify, import and remove the model;
     /// `None` when the host never set one.

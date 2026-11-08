@@ -19,7 +19,7 @@ pub mod raster;
 
 use std::path::{Path, PathBuf};
 
-pub use manifest::{InstallState, Manifest, ModelFile, TROCR_SMALL_HANDWRITTEN};
+pub use manifest::{InstallState, Manifest, ModelFile, PIX2TEXT_MFR, TROCR_SMALL_HANDWRITTEN};
 pub use raster::{Bbox, IMAGE_SIZE, LineImage};
 
 /// Everything that can go wrong before or during recognition. Errors are values, never panics:
@@ -101,8 +101,32 @@ impl Accelerator {
     }
 }
 
+/// What a recognizer produces from a line of ink.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum RecognitionOutput {
+    /// Typed text for a cell: the Action Pen (`docs/action-pen.md`).
+    #[default]
+    Text,
+    /// LaTeX source for an equation: Draw › Convert › Ink to Math (`docs/ink-to-math.md`).
+    Math,
+}
+
+impl RecognitionOutput {
+    /// The wire name commands and the model panel use.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RecognitionOutput::Text => "text",
+            RecognitionOutput::Math => "math",
+        }
+    }
+}
+
 /// Handwriting recognition a host can install on an engine session (this crate stays
 /// runtime-agnostic; `gridcraft-ink-rten` is the shipped implementation).
+///
+/// One trait serves both Draw › Action Pen (typed text) and Draw › Convert › Ink to Math (LaTeX):
+/// [`Recognizer::output`] says which the loaded model produces, so the engine refuses a model
+/// that would write LaTeX into a cell (or text into an equation).
 ///
 /// Implementations must be usable from any thread and must not panic: a model runtime's failure
 /// is a [`Error::Recognize`].
@@ -112,6 +136,10 @@ pub trait Recognizer: Send + Sync {
     fn recognize(&self, image: &LineImage) -> Result<String, Error>;
     /// The manifest id the recognizer was loaded from (`"trocr-small-handwritten"`).
     fn model_id(&self) -> &'static str;
+    /// What [`Recognizer::recognize`] answers: text for a cell, or LaTeX for an equation.
+    fn output(&self) -> RecognitionOutput {
+        RecognitionOutput::Text
+    }
     /// Where this recognizer runs. The shipped CPU backend answers [`Accelerator::Cpu`]; an
     /// optional accelerator crate overrides it. Behaviour is identical either way.
     fn accelerator(&self) -> Accelerator {
@@ -127,11 +155,19 @@ pub trait Recognizer: Send + Sync {
 #[derive(Clone, Debug)]
 pub struct FixedRecognizer {
     text: String,
+    output: RecognitionOutput,
+    id: &'static str,
 }
 
 impl FixedRecognizer {
+    /// Answers `text` as the Action Pen's handwriting model would.
     pub fn new(text: impl Into<String>) -> Self {
-        FixedRecognizer { text: text.into() }
+        FixedRecognizer { text: text.into(), output: RecognitionOutput::Text, id: TROCR_SMALL_HANDWRITTEN.id }
+    }
+
+    /// Answers `latex` as the Ink to Math model would.
+    pub fn math(latex: impl Into<String>) -> Self {
+        FixedRecognizer { text: latex.into(), output: RecognitionOutput::Math, id: PIX2TEXT_MFR.id }
     }
 }
 
@@ -140,7 +176,10 @@ impl Recognizer for FixedRecognizer {
         Ok(self.text.clone())
     }
     fn model_id(&self) -> &'static str {
-        TROCR_SMALL_HANDWRITTEN.id
+        self.id
+    }
+    fn output(&self) -> RecognitionOutput {
+        self.output
     }
 }
 
@@ -241,4 +280,9 @@ pub fn root_for(id: &str) -> Option<PathBuf> {
 /// directory can be found and `$GRIDCRAFT_MODELS` is unset).
 pub fn default_root() -> Option<PathBuf> {
     root_for(TROCR_SMALL_HANDWRITTEN.id)
+}
+
+/// The root for the Ink to Math model, whether or not it is there (see [`default_root`]).
+pub fn default_math_root() -> Option<PathBuf> {
+    root_for(PIX2TEXT_MFR.id)
 }

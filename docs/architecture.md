@@ -239,6 +239,7 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 | Date | Change | Summary |
 |---|---|---|
 | 2026-11-02 | minor | Python mode in the formula bar: Python mode on the shared editor, `code_field` and its stop keys; drafts follow their sheet by `model::SheetUid` |
+| 2026-11-07 | minor | Ink to Math: `RecognitionOutput` on the `Recognizer` seam, `Manifest::output`/`max_steps` and the `pix2text-mfr` manifest, `RtenRecognizer::load_math`, `Session::ink_math`, `draw.inkToMath` through the equation path, and a second section in the model panel; see [ink-to-math.md](ink-to-math.md) |
 | 2026-11-07 | minor | Action Pen: `ink` (L1, wasm-clean) for stroke rasterising, the `Recognizer` trait and the model manifest, `ink-rten` (L6, native) for TrOCR small on rten, and `Session::ink`/`Session::models_dir` as the host's seam; see [action-pen.md](action-pen.md) |
 | 2026-11-02 | minor | Python cells as data: `model::PyCode`, the file forms, calc laying out kept results, the limits on open, and what copying, filling and sorting do to `xl()` references; edits that would push code past the limit are refused |
 | 2026-11-01 | trivial | Equations: the layout cache answers for a source over the cap by its length alone, without hashing it |

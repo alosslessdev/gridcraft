@@ -281,13 +281,17 @@ impl SheetApp {
         }
     }
 
-    /// Wires the Action Pen to the host's model directory: sets the engine's models root and
-    /// loads the recognizer when the model is already installed. The desktop app calls this once
-    /// at startup; a host without a model directory leaves the tool unavailable.
+    /// Wires the ink models to the host's model directory: sets the engine's models root and
+    /// loads each recogniser whose model is already installed (handwriting and maths). The
+    /// desktop app calls this once at startup; a host without a model directory leaves the tools
+    /// unavailable.
     pub fn start_ink(&mut self) {
         crate::inkpanel::start(self);
         if let Ok(status) = self.run("ink.status", serde_json::json!({})) {
             self.grid.ink_status = Some(status);
+        }
+        if let Ok(status) = self.run("ink.mathStatus", serde_json::json!({})) {
+            self.grid.math_status = Some(status);
         }
     }
 

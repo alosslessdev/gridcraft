@@ -249,6 +249,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-11-07 | minor | Draw › Convert › Ink to Math: a ribbon button next to Ink to Shape, enabled only while ink is selected, that opens the model panel when the math model is absent and selects the equation it inserts; the panel now has a section per model ([ink-to-math.md](ink-to-math.md)) |
 | 2026-11-07 | minor | Draw › Action Pen: the ribbon button (on-state accent, opens the model panel when the model is absent) and that panel (licence, size, source, folder, Download, Import…, Remove); `draw.actionPen`, `draw.actionPenInk`, `ink.status`, `ink.modelImport`, `ink.modelRemove`; the model itself is downloaded, never bundled ([action-pen.md](action-pen.md)) |
 | 2026-11-02 | minor | Form controls: buttons, sliders (scroll bars) and spin buttons placed, worked, selected and edited on the sheet (Insert › Controls, Assign Action, Format Control); catalog 281 / 296 |
 | 2026-11-03 | minor | Highlight the active cell's row: a global preference that tints the whole row, off by default |
